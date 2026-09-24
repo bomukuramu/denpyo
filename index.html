@@ -44,6 +44,10 @@ button:disabled{opacity:.35}
 em{font-style:normal}
 .warn{display:none;background:var(--danger);color:#fff;padding:10px;font-weight:700;text-align:center}
 .warn.show{display:block}
+.cfgwarn{display:none;position:sticky;top:0;z-index:7;background:var(--danger);color:#fff;font-weight:800;font-size:13px;line-height:1.3;padding:6px 10px;padding-top:calc(6px + env(safe-area-inset-top));text-align:center}
+body.cfgbad .cfgwarn{display:block}
+body.cfgbad .tabs{top:var(--cfgh,44px);padding-top:6px}
+.mbtn .fb{font-size:10px;color:#ff9d9a;font-weight:700}
 .tabs{position:sticky;top:0;z-index:5;display:grid;gap:4px;padding:6px;padding-top:calc(6px + env(safe-area-inset-top));background:var(--bg);border-bottom:1px solid var(--line)}
 .tab{min-height:56px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0}
 .tab .n{font-size:19px;font-weight:800;line-height:1.1}
@@ -124,6 +128,22 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 .na-big{font-size:28px;font-weight:800;color:var(--accent);line-height:1.4;margin-bottom:16px}
 .na-box p{color:var(--muted);margin-bottom:28px;line-height:1.6}
 .na-box button{width:100%;font-size:14px}
+
+@media (max-height:700px){
+  .tab{min-height:48px}
+  .tab .n{font-size:17px}
+  .head{padding-top:6px}
+  .seatlabel b{font-size:38px}
+  .total{font-size:42px}
+  .guest input{min-height:44px}
+  .last{min-height:24px;padding-bottom:4px}
+  .mbtn{min-height:62px}
+  .mbtn.free{min-height:48px}
+  .pbar .pay{min-height:50px;font-size:18px}
+  .pinfo span{-webkit-line-clamp:1}
+  .sums{margin-top:4px}
+  .sums b{font-size:15px}
+}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10;display:none;align-items:flex-end;justify-content:center}
 .modal.show{display:flex}
 .box{background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:560px;padding:18px 14px calc(18px + env(safe-area-inset-bottom))}
@@ -142,6 +162,7 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 </style>
 </head>
 <body>
+<div id="cfgWarn" class="cfgwarn"></div>
 <div id="warn" class="warn"></div>
 <nav id="tabs" class="tabs"></nav>
 
@@ -202,14 +223,14 @@ const FALLBACK = {
     { name: '日本酒', price: 800 }, { name: 'クライナー', price: 3000 }, { name: 'シャンパン', price: 8000 },
   ],
 };
-let cfgProblem = '';
+let cfgProblem = '', usingFallback = false;
 const CFG = (() => {
   let c;
   try { c = CONFIG; } catch (_) { c = null; }
   const okInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
-  if (!c || typeof c !== 'object') { cfgProblem = '設定（メニュー）に書き間違いがあるため、予備のメニューで起動しています。'; return FALLBACK; }
+  if (!c || typeof c !== 'object') { cfgProblem = 'メニューの設定に書き間違いがあります。予備メニュー（値段が古い可能性あり）で動いています。'; usingFallback = true; return FALLBACK; }
   const menu = Array.isArray(c.menu) ? c.menu.filter(m => m && typeof m.name === 'string' && m.name && okInt(m.price, 1, 9999999)) : [];
-  if (!menu.length) { cfgProblem = 'メニューが読めないため、予備のメニューで起動しています。'; return FALLBACK; }
+  if (!menu.length) { cfgProblem = 'メニューが読めません。予備メニュー（値段が古い可能性あり）で動いています。'; usingFallback = true; return FALLBACK; }
   if (Array.isArray(c.menu) && menu.length !== c.menu.length) cfgProblem = '一部のメニューに書き間違いがあり、表示していません。';
   return {
     seats: okInt(c.seats, 1, 30) ? c.seats : FALLBACK.seats,
@@ -290,7 +311,7 @@ function save() {
     }
     S.rev = (S.rev || 0) + 1;
     localStorage.setItem(KEY, JSON.stringify(S));
-    if (!loadProblem && !cfgProblem) $('#warn').classList.remove('show');
+    if (!loadProblem) $('#warn').classList.remove('show');
     return true;
   } catch (e) {
     showWarn('⚠ 保存に失敗しました。紙にも控えてください（プライベートモード／容量不足の可能性）');
@@ -374,7 +395,7 @@ function renderMenu() {
   const m = $('#menu');
   m.style.gridTemplateColumns = `repeat(${CFG.menuColumns},1fr)`;
   m.innerHTML = CFG.menu.map((x, i) =>
-    `<button class="mbtn" data-a="add" data-i="${i}">${esc(x.name)}<small>${yen(x.price)}</small></button>`).join('') +
+    `<button class="mbtn" data-a="add" data-i="${i}">${esc(x.name)}<small>${yen(x.price)}</small>${usingFallback ? '<span class="fb">予備</span>' : ''}</button>`).join('') +
     `<button class="mbtn free" data-a="free">＋ 自由入力（品名・金額）</button>`;
   $('#tabs').style.gridTemplateColumns = `repeat(${CFG.tabColumns || CFG.seats},1fr)`;
 }
@@ -657,13 +678,20 @@ try { if ('serviceWorker' in navigator && location.protocol === 'https:') naviga
 
 renderMenu();
 render();
+// 下に固定した会計バーの高さに合わせて、ページ下の余白を自動で取る（最後の項目が隠れないように）
+function fitFoot() { document.body.style.paddingBottom = ($('.foot').offsetHeight + 16) + 'px'; }
+fitFoot(); window.addEventListener('resize', fitFoot);
 // GitHub で公開したページを、ホーム画面のアイコン以外（Safari・LINE内ブラウザ等）で開いた時だけ注意を出す
 try {
   const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
   let ok = false; try { ok = sessionStorage.getItem('notAppOk') === '1'; } catch (_) {}
   if (location.protocol === 'https:' && !standalone && !ok) $('#notApp').classList.add('show');
 } catch (_) {}
-if (loadProblem || cfgProblem) showWarn('⚠ ' + [loadProblem, cfgProblem].filter(Boolean).join(' '));
+if (cfgProblem) {
+  const cw = $('#cfgWarn'); cw.textContent = '⚠ ' + cfgProblem; document.body.classList.add('cfgbad');
+  document.documentElement.style.setProperty('--cfgh', cw.offsetHeight + 'px');
+}
+if (loadProblem) showWarn('⚠ ' + loadProblem);
 // 起動時は書き込まず、保存できる環境かだけ確かめる
 else { try { localStorage.setItem(KEY + '-test', '1'); localStorage.removeItem(KEY + '-test'); }
        catch (_) { showWarn('⚠ 保存が使えません。紙にも控えてください（プライベートモード／容量不足の可能性）'); } }
