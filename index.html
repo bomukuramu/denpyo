@@ -37,7 +37,7 @@ const CONFIG = {
 :root{--bg:#0b0b0d;--panel:#16161a;--panel2:#1f1f25;--line:#2c2c33;--text:#ece9e4;--muted:#9b978f;--accent:#f2b134;--cash:#46b85a;--pay:#e5484d;--danger:#c9433f}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--text)}
-body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:16px;line-height:1.4;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:16px;line-height:1.4;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%;padding-bottom:calc(160px + env(safe-area-inset-bottom))}
 button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(--line);border-radius:10px;min-height:44px;min-width:44px;cursor:pointer}
 button:active{background:#3a3a44}
 button:disabled{opacity:.35}
@@ -85,10 +85,10 @@ em{font-style:normal}
 .row button{min-width:52px;font-size:15px}
 .row .del{color:#ff9d9a}
 .empty{padding:16px;text-align:center;color:var(--muted)}
-.acts{display:flex;gap:8px;padding:12px 10px}
+.acts{display:flex;justify-content:flex-end;padding:12px 10px}
 .pay{flex:1;min-height:66px;font-size:22px;font-weight:800;background:var(--accent);color:#111;border:0}
 .pay:active{background:#c98f1f}
-.reset{min-width:96px;font-size:14px;line-height:1.2}
+.reset{min-width:150px;font-size:14px;padding:0 14px}
 .done{margin:16px 10px 0}
 h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
@@ -107,11 +107,23 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 .box textarea{width:100%;height:46vh;font:16px/1.5 ui-monospace,Menlo,monospace;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;resize:none;-webkit-user-select:text;user-select:text}
 .danger{margin:28px 10px 16px}
 .danger button{width:100%;color:#ff9d9a;border-color:#4a2423;font-size:14px}
-.foot{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#101013;border-top:1px solid var(--line);display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
-.foot div{display:flex;flex-direction:column;min-width:0}
-.foot span{font-size:11px;color:var(--muted)}
-.foot b{font-size:20px;font-variant-numeric:tabular-nums}
+.foot{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#101013;border-top:1px solid var(--line);padding:8px 10px calc(6px + env(safe-area-inset-bottom))}
+.pbar{display:flex;gap:8px;align-items:stretch}
+.pinfo{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.pinfo b{font-size:14px;color:var(--accent);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pinfo span{font-size:12px;line-height:1.3;color:#d4d0c9;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.pbar .pay{flex:0 0 50%;min-height:60px;font-size:20px}
+.sums{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;margin-top:6px;padding:0 2px}
+.sums div{display:flex;flex-direction:column;min-width:0}
+.sums span{font-size:11px;color:var(--muted)}
+.sums b{font-size:17px;font-variant-numeric:tabular-nums}
 .foot .open{color:var(--accent)}
+.notapp{position:fixed;inset:0;z-index:20;background:#0b0b0d;display:none;align-items:center;justify-content:center;padding:24px}
+.notapp.show{display:flex}
+.na-box{max-width:420px;text-align:center}
+.na-big{font-size:28px;font-weight:800;color:var(--accent);line-height:1.4;margin-bottom:16px}
+.na-box p{color:var(--muted);margin-bottom:28px;line-height:1.6}
+.na-box button{width:100%;font-size:14px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10;display:none;align-items:flex-end;justify-content:center}
 .modal.show{display:flex}
 .box{background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:560px;padding:18px 14px calc(18px + env(safe-area-inset-bottom))}
@@ -143,8 +155,7 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
   <div id="menu" class="menu"></div>
   <div id="lines" class="lines"></div>
   <div class="acts">
-    <button id="payBtn" class="pay" data-a="pay">会計</button>
-    <button class="reset" data-a="clear">伝票を<br>空にする</button>
+    <button class="reset" data-a="clear">伝票を空にする</button>
   </div>
 </div>
 
@@ -158,16 +169,55 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 <div class="danger"><button data-a="wipe">全リセット（営業終了後に・2段階確認）</button></div>
 
 <footer class="foot">
+  <div class="pbar">
+    <div class="pinfo"><b id="pNo">No.1</b><span id="pBrief">―</span></div>
+    <button id="payBtn" class="pay" data-a="pay">会計</button>
+  </div>
+  <div class="sums">
   <div><span>本日合計 <em id="fCount"></em></span><b id="fTotal">¥0</b><span id="fOpen" class="open"></span></div>
   <div><span>現金 <em id="fCashN"></em></span><b id="fCash">¥0</b></div>
   <div><span>PayPay <em id="fPayN"></em></span><b id="fPay">¥0</b></div>
+  </div>
 </footer>
+
+<div id="notApp" class="notapp">
+  <div class="na-box">
+    <div class="na-big">ホーム画面の<br>「伝票」アイコンから<br>開いてください</div>
+    <p>ここ（Safariなど）で付けた伝票は、アイコンのアプリとは<b>別のデータ</b>になります。</p>
+    <button class="b-x" data-a="notAppOk">確認用なので、このまま使う</button>
+  </div>
+</div>
 
 <div id="modal" class="modal"><div id="box" class="box"></div></div>
 
 <script>
 (function () {
 'use strict';
+/* 設定が読めない・おかしい時は、この予備の設定で起動する */
+const FALLBACK = {
+  seats: 14, tabColumns: 7, menuColumns: 3,
+  menu: [
+    { name: 'チャージ', price: 800 }, { name: 'お茶割り', price: 800 }, { name: 'ビール', price: 800 },
+    { name: 'ハイボール', price: 800 }, { name: 'レモンサワー', price: 900 }, { name: 'トマト割り', price: 1000 },
+    { name: '日本酒', price: 800 }, { name: 'クライナー', price: 3000 }, { name: 'シャンパン', price: 8000 },
+  ],
+};
+let cfgProblem = '';
+const CFG = (() => {
+  let c;
+  try { c = CONFIG; } catch (_) { c = null; }
+  const okInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+  if (!c || typeof c !== 'object') { cfgProblem = '設定（メニュー）に書き間違いがあるため、予備のメニューで起動しています。'; return FALLBACK; }
+  const menu = Array.isArray(c.menu) ? c.menu.filter(m => m && typeof m.name === 'string' && m.name && okInt(m.price, 1, 9999999)) : [];
+  if (!menu.length) { cfgProblem = 'メニューが読めないため、予備のメニューで起動しています。'; return FALLBACK; }
+  if (Array.isArray(c.menu) && menu.length !== c.menu.length) cfgProblem = '一部のメニューに書き間違いがあり、表示していません。';
+  return {
+    seats: okInt(c.seats, 1, 30) ? c.seats : FALLBACK.seats,
+    tabColumns: okInt(c.tabColumns, 1, 10) ? c.tabColumns : FALLBACK.tabColumns,
+    menuColumns: okInt(c.menuColumns, 1, 5) ? c.menuColumns : FALLBACK.menuColumns,
+    menu,
+  };
+})();
 const KEY = 'bar-denpyo-v1';
 const $ = s => document.querySelector(s);
 const yen = n => '¥' + Number(n).toLocaleString('ja-JP');
@@ -180,7 +230,7 @@ const mName = m => m === 'cash' ? '現金' : 'PayPay';
 function sumLines(ls) { return ls.reduce((a, l) => a + l.price * l.qty, 0); }
 function fresh() {
   const seats = {};
-  for (let i = 1; i <= CONFIG.seats; i++) seats[i] = { lines: [], name: '' };
+  for (let i = 1; i <= CFG.seats; i++) seats[i] = { lines: [], name: '' };
   return { v: 1, cur: 1, seats, done: [], started: Date.now() };
 }
 const num = v => (Number.isFinite(+v) ? Math.round(+v) : 0);
@@ -190,7 +240,7 @@ const cleanLines = ls => (Array.isArray(ls) ? ls : [])
   .filter(l => l.qty > 0);
 function normalize(o) {
   if (!o || typeof o !== 'object' || !o.seats || typeof o.seats !== 'object' || !Array.isArray(o.done)) throw new Error('bad');
-  for (let i = 1; i <= CONFIG.seats; i++) {
+  for (let i = 1; i <= CFG.seats; i++) {
     const st = o.seats[i] && typeof o.seats[i] === 'object' ? o.seats[i] : {};
     o.seats[i] = { lines: cleanLines(st.lines), name: typeof st.name === 'string' ? st.name.slice(0, 30) : '' };
   }
@@ -204,7 +254,7 @@ function normalize(o) {
       method: d.method === 'paypay' ? 'paypay' : 'cash', at: num(d.at) || Date.now(),
     };
   });
-  o.cur = num(o.cur); if (!(o.cur >= 1 && o.cur <= CONFIG.seats)) o.cur = 1;
+  o.cur = num(o.cur); if (!(o.cur >= 1 && o.cur <= CFG.seats)) o.cur = 1;
   o.rev = num(o.rev); o.started = num(o.started) || Date.now();
   return o;
 }
@@ -240,7 +290,7 @@ function save() {
     }
     S.rev = (S.rev || 0) + 1;
     localStorage.setItem(KEY, JSON.stringify(S));
-    if (!loadProblem) $('#warn').classList.remove('show');
+    if (!loadProblem && !cfgProblem) $('#warn').classList.remove('show');
     return true;
   } catch (e) {
     showWarn('⚠ 保存に失敗しました。紙にも控えてください（プライベートモード／容量不足の可能性）');
@@ -264,7 +314,7 @@ function render() {
   const cur = S.cur, seat = S.seats[cur];
 
   let h = '';
-  for (let i = 1; i <= CONFIG.seats; i++) {
+  for (let i = 1; i <= CFG.seats; i++) {
     const used = S.seats[i].lines.length > 0, nm = S.seats[i].name;
     h += `<button class="tab${i === cur ? ' cur' : ''}${used || nm ? ' used' : ''}" data-a="seat" data-i="${i}">` +
          `<span class="n">${i}</span><span class="a">${used ? yen(seatTotal(i)) : (nm ? '' : '空')}</span>` +
@@ -293,6 +343,9 @@ function render() {
   const pb = $('#payBtn');
   pb.disabled = tot === 0;
   pb.textContent = tot ? '会計　' + yen(tot) : '会計';
+  const cnt = seat.lines.reduce((a, l) => a + l.qty, 0);
+  $('#pNo').textContent = `No.${cur}${seat.name ? '　' + san(seat.name) : ''}${cnt ? '　' + cnt + '点' : ''}`;
+  $('#pBrief').textContent = seat.lines.length ? seat.lines.map(l => l.name + '×' + l.qty).join(' ') : '空き伝票';
 
   $('#doneCount').textContent = S.done.length ? `（${S.done.length}件）` : '';
   $('#doneList').innerHTML = S.done.length
@@ -307,7 +360,7 @@ function render() {
 
   let cash = 0, pp = 0, cn = 0, pn = 0, open = 0;
   S.done.forEach(d => { if (d.method === 'cash') { cash += d.total; cn++; } else { pp += d.total; pn++; } });
-  for (let i = 1; i <= CONFIG.seats; i++) open += seatTotal(i);
+  for (let i = 1; i <= CFG.seats; i++) open += seatTotal(i);
   $('#fTotal').textContent = yen(cash + pp);
   $('#fCount').textContent = S.done.length ? S.done.length + '件' : '';
   $('#fCash').textContent = yen(cash);
@@ -319,11 +372,11 @@ function render() {
 
 function renderMenu() {
   const m = $('#menu');
-  m.style.gridTemplateColumns = `repeat(${CONFIG.menuColumns},1fr)`;
-  m.innerHTML = CONFIG.menu.map((x, i) =>
+  m.style.gridTemplateColumns = `repeat(${CFG.menuColumns},1fr)`;
+  m.innerHTML = CFG.menu.map((x, i) =>
     `<button class="mbtn" data-a="add" data-i="${i}">${esc(x.name)}<small>${yen(x.price)}</small></button>`).join('') +
     `<button class="mbtn free" data-a="free">＋ 自由入力（品名・金額）</button>`;
-  $('#tabs').style.gridTemplateColumns = `repeat(${CONFIG.tabColumns || CONFIG.seats},1fr)`;
+  $('#tabs').style.gridTemplateColumns = `repeat(${CFG.tabColumns || CFG.seats},1fr)`;
 }
 
 /* ---------- モーダル ---------- */
@@ -331,7 +384,7 @@ let mh = {};
 function modal(html, handlers) { $('#box').innerHTML = html; mh = handlers || {}; $('#modal').classList.add('show'); }
 let blockUntil = 0; // 画面が変わった直後のタップを捨てる（2度押し対策）
 let tapX = -999, tapY = -999, bX = -999, bY = -999;
-const block = () => { blockUntil = Date.now() + 450; bX = tapX; bY = tapY; }; // 同じ位置の2回目だけ捨てる
+const block = () => { blockUntil = Date.now() + 1000; bX = tapX; bY = tapY; }; // 同じ位置の2回目だけ捨てる
 function closeModal() { $('#modal').classList.remove('show'); mh = {}; block(); }
 function ask(msg, okLabel, onOk, opt) {
   opt = opt || {};
@@ -347,11 +400,11 @@ function say(t, hit) { lastMsg = t; lastHit = !!hit; }
 function buzz() { try { if (navigator.vibrate) navigator.vibrate(12); } catch (_) {} }
 
 function go(n) {
-  if (n < 1 || n > CONFIG.seats || n === S.cur) return;
+  if (n < 1 || n > CFG.seats || n === S.cur) return;
   S.cur = n; say(''); commit();
 }
 function add(i) {
-  const m = CONFIG.menu[i]; if (!m) return;
+  const m = CFG.menu[i]; if (!m) return;
   const ls = S.seats[S.cur].lines;
   let l = ls.find(x => x.name === m.name && x.price === m.price);
   if (l) l.qty++; else { l = { name: m.name, price: m.price, qty: 1 }; ls.push(l); }
@@ -413,13 +466,13 @@ function swapMethod(id) {
   });
 }
 function firstEmpty() {
-  for (let i = 1; i <= CONFIG.seats; i++) if (!S.seats[i].lines.length && !S.seats[i].name) return i;
+  for (let i = 1; i <= CFG.seats; i++) if (!S.seats[i].lines.length && !S.seats[i].name) return i;
   return 0;
 }
 function undoDone(id) {
   const d = S.done[findDone(id)]; if (!d) return;
   const to = firstEmpty();
-  if (!to) { ask(`空いている伝票がありません（${CONFIG.seats}枚すべて使用中）。<br>どれかを会計してから戻してください。`, 'OK', () => {}); return; }
+  if (!to) { ask(`空いている伝票がありません（${CFG.seats}枚すべて使用中）。<br>どれかを会計してから戻してください。`, 'OK', () => {}); return; }
   ask(`${d.name ? esc(san(d.name)) + '（' : '（'}${hm(d.at)}・${yen(d.total)}）を会計前に戻しますか？<br><b>空いている No.${to} に戻します。</b>`, '伝票に戻す', () => {
     const k = findDone(id); if (k < 0) return;
     const n = firstEmpty(); if (!n) return;
@@ -432,7 +485,7 @@ function undoDone(id) {
 }
 function wipe() {
   let open = 0, openSeats = 0;
-  for (let i = 1; i <= CONFIG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openSeats++; } }
+  for (let i = 1; i <= CFG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openSeats++; } }
   const doneSum = S.done.reduce((a, d) => a + d.total, 0);
   ask(`全データを消去します。<br>・会計済み ${S.done.length}件　${yen(doneSum)}<br>・未会計 ${openSeats}枚　${yen(open)}<br><br>紙への書き写しは終わっていますか？`,
       '次へ', () => {
@@ -494,7 +547,7 @@ function exportText() {
   const ymd = `${d0.getFullYear()}/${d0.getMonth() + 1}/${d0.getDate()}`;
   let cash = 0, pp = 0, cn = 0, pn = 0, open = 0, openN = 0;
   S.done.forEach(d => { if (d.method === 'cash') { cash += d.total; cn++; } else { pp += d.total; pn++; } });
-  for (let i = 1; i <= CONFIG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openN++; } }
+  for (let i = 1; i <= CFG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openN++; } }
   const L = [];
   L.push(`【${ymd} 営業】`);
   L.push(`本日合計 ${yen(cash + pp)}（${S.done.length}件）`);
@@ -507,7 +560,7 @@ function exportText() {
   });
   if (open) {
     L.push('---------- 未会計');
-    for (let i = 1; i <= CONFIG.seats; i++) {
+    for (let i = 1; i <= CFG.seats; i++) {
       const s = S.seats[i]; if (!s.lines.length) continue;
       L.push(`No.${i} ${san(s.name) || '(名前なし)'} ${yen(seatTotal(i))}`);
       L.push('  ' + s.lines.map(l => `${l.name}×${l.qty} ${yen(l.price * l.qty)}`).join(' / '));
@@ -560,6 +613,7 @@ document.addEventListener('click', e => {
     case 'wipe': wipe(); break;
     case 'free': openFree(); break;
     case 'export': openExport(); break;
+    case 'notAppOk': $('#notApp').classList.remove('show'); try { sessionStorage.setItem('notAppOk', '1'); } catch (_) {} break;
   }
 });
 
@@ -603,7 +657,13 @@ try { if ('serviceWorker' in navigator && location.protocol === 'https:') naviga
 
 renderMenu();
 render();
-if (loadProblem) showWarn('⚠ ' + loadProblem);
+// GitHub で公開したページを、ホーム画面のアイコン以外（Safari・LINE内ブラウザ等）で開いた時だけ注意を出す
+try {
+  const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  let ok = false; try { ok = sessionStorage.getItem('notAppOk') === '1'; } catch (_) {}
+  if (location.protocol === 'https:' && !standalone && !ok) $('#notApp').classList.add('show');
+} catch (_) {}
+if (loadProblem || cfgProblem) showWarn('⚠ ' + [loadProblem, cfgProblem].filter(Boolean).join(' '));
 // 起動時は書き込まず、保存できる環境かだけ確かめる
 else { try { localStorage.setItem(KEY + '-test', '1'); localStorage.removeItem(KEY + '-test'); }
        catch (_) { showWarn('⚠ 保存が使えません。紙にも控えてください（プライベートモード／容量不足の可能性）'); } }
