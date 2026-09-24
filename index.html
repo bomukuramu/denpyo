@@ -17,8 +17,9 @@
    ・価格を変えても、すでに付けた明細の金額は変わりません
    ========================================================= */
 const CONFIG = {
-  seats: 14,         // 同時に持てる伝票の数（席には紐づかない）
-  tabColumns: 7,     // 伝票タブの列数（14個なら7列×2段）
+  seats: 14,         // 同時に持てる伝票の最大数（席には紐づかない）
+  baseSeats: 7,      // いつも表示しておく伝票の数（それ以上は「＋」で追加、空になると自動で隠れる）
+  tabColumns: 7,     // 伝票タブの1段あたりの数
   menuColumns: 3,    // メニューボタンの列数
   menu: [
     { name: 'チャージ',       price: 800 },
@@ -46,17 +47,17 @@ em{font-style:normal}
 .warn.show{display:block}
 .cfgwarn{display:none;position:sticky;top:0;z-index:7;background:var(--danger);color:#fff;font-weight:800;font-size:13px;line-height:1.3;padding:6px 10px;padding-top:calc(6px + env(safe-area-inset-top));text-align:center}
 body.cfgbad .cfgwarn{display:block}
-body.cfgbad .tabs{top:var(--cfgh,44px);padding-top:6px}
 .mbtn .fb{font-size:10px;color:#ff9d9a;font-weight:700}
-.tabs{position:sticky;top:0;z-index:5;display:grid;gap:4px;padding:6px;padding-top:calc(6px + env(safe-area-inset-top));background:var(--bg);border-bottom:1px solid var(--line)}
-.tab{min-height:56px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0}
-.tab .n{font-size:19px;font-weight:800;line-height:1.1}
-.tab .a{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tabs{display:grid;gap:4px;margin-bottom:8px}
+body{padding-top:env(safe-area-inset-top)}
+.tab{min-height:54px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0}
+.tab .n{font-size:20px;font-weight:800;line-height:1.1}
+.tab .a{font-size:11px;font-weight:700;letter-spacing:-.3px;color:var(--muted);font-variant-numeric:tabular-nums}
 .tab.used{border-color:#7a6326}
 .tab.used .a{color:var(--accent)}
 .tab.cur{background:var(--accent);color:#111;border-color:var(--accent)}
 .tab.cur .a{color:#111}
-.tab .g{font-size:10px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px;color:var(--text)}
+.tab .g{font-size:10px;line-height:1.1;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px;color:var(--text)}
 .guest{padding:6px 10px 0;display:flex;align-items:center;gap:8px}
 .guest input{width:auto;flex:0 1 66%;min-width:0;min-height:44px;font-size:17px}
 .guest .san{font-size:18px;color:var(--muted)}
@@ -89,10 +90,11 @@ body.cfgbad .tabs{top:var(--cfgh,44px);padding-top:6px}
 .row button{min-width:52px;font-size:15px}
 .row .del{color:#ff9d9a}
 .empty{padding:16px;text-align:center;color:var(--muted)}
-.acts{display:flex;justify-content:flex-end;padding:12px 10px}
+.acts{display:flex;justify-content:space-between;gap:8px;padding:12px 10px}
+.addslot{flex:1;font-size:14px;padding:0 10px;color:var(--accent);white-space:nowrap}
 .pay{flex:1;min-height:66px;font-size:22px;font-weight:800;background:var(--accent);color:#111;border:0}
 .pay:active{background:#c98f1f}
-.reset{min-width:150px;font-size:14px;padding:0 14px}
+.reset{flex:1;font-size:14px;padding:0 10px;white-space:nowrap}
 .done{margin:16px 10px 0}
 h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
@@ -131,7 +133,8 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 
 @media (max-height:700px){
   .tab{min-height:48px}
-  .tab .n{font-size:17px}
+  .tab .n{font-size:18px}
+  .tabs{margin-bottom:6px}
   .head{padding-top:6px}
   .seatlabel b{font-size:38px}
   .total{font-size:42px}
@@ -164,7 +167,6 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 <body>
 <div id="cfgWarn" class="cfgwarn"></div>
 <div id="warn" class="warn"></div>
-<nav id="tabs" class="tabs"></nav>
 
 <div id="main">
   <div class="head">
@@ -176,6 +178,7 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
   <div id="menu" class="menu"></div>
   <div id="lines" class="lines"></div>
   <div class="acts">
+    <button id="addSlot" class="addslot" data-a="addslot">＋ 伝票を追加</button>
     <button class="reset" data-a="clear">伝票を空にする</button>
   </div>
 </div>
@@ -190,6 +193,7 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 <div class="danger"><button data-a="wipe">全リセット（営業終了後に・2段階確認）</button></div>
 
 <footer class="foot">
+  <nav id="tabs" class="tabs"></nav>
   <div class="pbar">
     <div class="pinfo"><b id="pNo">No.1</b><span id="pBrief">―</span></div>
     <button id="payBtn" class="pay" data-a="pay">会計</button>
@@ -216,7 +220,7 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
 'use strict';
 /* 設定が読めない・おかしい時は、この予備の設定で起動する */
 const FALLBACK = {
-  seats: 14, tabColumns: 7, menuColumns: 3,
+  seats: 14, baseSeats: 7, tabColumns: 7, menuColumns: 3,
   menu: [
     { name: 'チャージ', price: 800 }, { name: 'お茶割り', price: 800 }, { name: 'ビール', price: 800 },
     { name: 'ハイボール', price: 800 }, { name: 'レモンサワー', price: 900 }, { name: 'トマト割り', price: 1000 },
@@ -235,6 +239,7 @@ const CFG = (() => {
   return {
     seats: okInt(c.seats, 1, 30) ? c.seats : FALLBACK.seats,
     tabColumns: okInt(c.tabColumns, 1, 10) ? c.tabColumns : FALLBACK.tabColumns,
+    baseSeats: okInt(c.baseSeats, 1, 30) ? c.baseSeats : FALLBACK.baseSeats,
     menuColumns: okInt(c.menuColumns, 1, 5) ? c.menuColumns : FALLBACK.menuColumns,
     menu,
   };
@@ -335,13 +340,16 @@ function render() {
   const cur = S.cur, seat = S.seats[cur];
 
   let h = '';
-  for (let i = 1; i <= CFG.seats; i++) {
+  for (const i of visibleSlots()) {
     const used = S.seats[i].lines.length > 0, nm = S.seats[i].name;
     h += `<button class="tab${i === cur ? ' cur' : ''}${used || nm ? ' used' : ''}" data-a="seat" data-i="${i}">` +
          `<span class="n">${i}</span><span class="a">${used ? yen(seatTotal(i)) : (nm ? '' : '空')}</span>` +
          (nm ? `<span class="g">${esc(nm)}</span>` : '') + `</button>`;
   }
   $('#tabs').innerHTML = h;
+  const free = nextExtra();
+  const ab = $('#addSlot'); ab.disabled = !free; ab.textContent = free ? `＋ 伝票を追加（No.${free}）` : `満杯（${CFG.seats}枚）`;
+  if (typeof fitFoot === 'function') fitFoot();
 
   const tot = seatTotal(cur);
   $('#seatno').textContent = cur;
@@ -420,6 +428,19 @@ function ask(msg, okLabel, onOk, opt) {
 function say(t, hit) { lastMsg = t; lastHit = !!hit; }
 function buzz() { try { if (navigator.vibrate) navigator.vibrate(12); } catch (_) {} }
 
+const inUse = i => S.seats[i].lines.length > 0 || !!S.seats[i].name;
+// いつも見せる1〜7番＋、使用中の8番以降＋、今開いている伝票
+function visibleSlots() {
+  const v = [];
+  for (let i = 1; i <= CFG.seats; i++) if (i <= CFG.baseSeats || inUse(i) || i === S.cur) v.push(i);
+  return v;
+}
+// 「＋」で出す番号：8番以降で、まだ使っていない一番若い番号
+function nextExtra() {
+  for (let i = CFG.baseSeats + 1; i <= CFG.seats; i++) if (!inUse(i) && i !== S.cur) return i;
+  return 0;
+}
+function addSlot() { const n = nextExtra(); if (!n) return; S.cur = n; say(`No.${n} を追加しました`); commit(); }
 function go(n) {
   if (n < 1 || n > CFG.seats || n === S.cur) return;
   S.cur = n; say(''); commit();
@@ -634,6 +655,7 @@ document.addEventListener('click', e => {
     case 'wipe': wipe(); break;
     case 'free': openFree(); break;
     case 'export': openExport(); break;
+    case 'addslot': addSlot(); break;
     case 'notAppOk': $('#notApp').classList.remove('show'); try { sessionStorage.setItem('notAppOk', '1'); } catch (_) {} break;
   }
 });
@@ -647,7 +669,7 @@ main.addEventListener('touchstart', e => { const t0 = e.touches[0];
   const t = t0; sx = t.clientX; sy = t.clientY; st = Date.now(); }, { passive: true });
 main.addEventListener('touchend', e => {
   const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
-  if (Math.abs(dx) > 100 && Math.abs(dx) > Math.abs(dy) * 2 && st && Date.now() - st < 700) go(S.cur + (dx < 0 ? 1 : -1));
+  if (Math.abs(dx) > 100 && Math.abs(dx) > Math.abs(dy) * 2 && st && Date.now() - st < 700) { const v = visibleSlots(), k = v.indexOf(S.cur); const t = v[k + (dx < 0 ? 1 : -1)]; if (t) go(t); }
 }, { passive: true });
 
 // 画面が消えないようにする（対応ブラウザのみ）
