@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="伝票">
+<title>バー伝票</title>
+<script>
+/* =========================================================
+   設定 ― ここだけ書き換えればOK
+   ・menu は「よく出る順」に上から並べる（ボタンもこの順）
+   ・price は税込の円（整数）
+   ・価格を変えても、すでに付けた明細の金額は変わりません
+   ========================================================= */
+const CONFIG = {
+  seats: 14,         // 同時に持てる伝票の数（席には紐づかない）
+  tabColumns: 7,     // 伝票タブの列数（14個なら7列×2段）
+  menuColumns: 3,    // メニューボタンの列数
+  menu: [
+    { name: 'チャージ',       price: 800 },
+    { name: 'お茶割り',       price: 800 },
+    { name: 'ビール',         price: 800 },
+    { name: 'ハイボール',     price: 800 },
+    { name: 'レモンサワー',   price: 900 },
+    { name: 'トマト割り',     price: 1000 },
+    { name: '日本酒',         price: 800 },
+    { name: 'クライナー',     price: 3000 },
+    { name: 'シャンパン',     price: 8000 },
+  ],
+};
+</script>
+<style>
+:root{--bg:#0b0b0d;--panel:#16161a;--panel2:#1f1f25;--line:#2c2c33;--text:#ece9e4;--muted:#9b978f;--accent:#f2b134;--cash:#46b85a;--pay:#e5484d;--danger:#c9433f}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text)}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:16px;line-height:1.4;touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(--line);border-radius:10px;min-height:44px;min-width:44px;cursor:pointer}
+button:active{background:#3a3a44}
+button:disabled{opacity:.35}
+em{font-style:normal}
+.warn{display:none;background:var(--danger);color:#fff;padding:10px;font-weight:700;text-align:center}
+.warn.show{display:block}
+.tabs{position:sticky;top:0;z-index:5;display:grid;gap:4px;padding:6px;padding-top:calc(6px + env(safe-area-inset-top));background:var(--bg);border-bottom:1px solid var(--line)}
+.tab{min-height:56px;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px 0}
+.tab .n{font-size:19px;font-weight:800;line-height:1.1}
+.tab .a{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tab.used{border-color:#7a6326}
+.tab.used .a{color:var(--accent)}
+.tab.cur{background:var(--accent);color:#111;border-color:var(--accent)}
+.tab.cur .a{color:#111}
+.tab .g{font-size:10px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px;color:var(--text)}
+.guest{padding:6px 10px 0}
+.guest input,.fld{width:100%;min-height:48px;font:inherit;font-size:18px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 12px;-webkit-user-select:text;user-select:text}
+.guest input::placeholder,.fld::placeholder{color:#6d6a64}
+.guest input:focus,.fld:focus{outline:none;border-color:var(--accent)}
+.mbtn.free{grid-column:1/-1;min-height:56px;flex-direction:row;gap:8px;border-style:dashed;color:var(--accent)}
+.box label{display:block;font-size:14px;color:var(--muted);margin:10px 0 6px}
+.fld.price{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
+.b-q{min-height:72px;font-size:24px;font-weight:800;line-height:1.2}
+.b-q.other{font-size:18px;color:var(--accent)}
+.b-q small{font-size:12px;font-weight:400;color:var(--muted)}
+.ferr{color:#ff9d9a;font-size:14px;min-height:20px;margin-top:6px}
+.card .gn{font-size:16px;font-weight:700;color:var(--accent);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.head{display:flex;align-items:flex-end;justify-content:space-between;padding:10px 14px 0}
+.seatlabel{font-size:20px;font-weight:700;color:var(--accent)}
+.seatlabel b{font-size:46px;line-height:1}
+.total{font-size:50px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-1px;line-height:1.1}
+.last{padding:4px 14px 8px;color:var(--muted);font-size:14px;min-height:30px}
+.last.hit{color:var(--accent)}
+.menu{display:grid;gap:8px;padding:0 10px}
+.mbtn{min-height:74px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700;font-size:16px;line-height:1.2}
+.mbtn small{font-weight:400;color:var(--muted);font-size:12px;margin-top:3px}
+.lines{margin:12px 10px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.row{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 12px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .nm{flex:1;font-size:17px;min-width:0}
+.row .q{font-weight:800;color:var(--accent);margin-left:6px}
+.row .sub{font-variant-numeric:tabular-nums;min-width:64px;text-align:right;margin-right:4px}
+.row button{min-width:52px;font-size:15px}
+.row .del{color:#ff9d9a}
+.empty{padding:16px;text-align:center;color:var(--muted)}
+.acts{display:flex;gap:8px;padding:12px 10px}
+.pay{flex:1;min-height:66px;font-size:22px;font-weight:800;background:var(--accent);color:#111;border:0}
+.pay:active{background:#c98f1f}
+.reset{min-width:96px;font-size:14px;line-height:1.2}
+.done{margin:16px 10px 0}
+h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.card .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card .s{font-weight:800;font-size:19px}
+.card .t{color:var(--muted);font-size:14px}
+.tag{font-size:13px;padding:2px 8px;border-radius:6px;font-weight:700}
+.tag.cash{background:#1d3a22;color:#8fe39c}
+.tag.paypay{background:#3f1c1e;color:#ff9fa1}
+.card .amt{margin-left:auto;font-size:21px;font-weight:800;font-variant-numeric:tabular-nums}
+.card .items{margin:6px 0 8px;font-size:15px;color:#d4d0c9}
+.card .ops{display:flex;gap:8px}
+.card .ops button{font-size:13px;padding:0 12px;color:var(--muted)}
+.export{margin:12px 10px 0}
+.export button{width:100%;min-height:52px;font-size:15px;color:var(--accent)}
+.box textarea{width:100%;height:46vh;font:16px/1.5 ui-monospace,Menlo,monospace;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;resize:none;-webkit-user-select:text;user-select:text}
+.danger{margin:28px 10px 16px}
+.danger button{width:100%;color:#ff9d9a;border-color:#4a2423;font-size:14px}
+.foot{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#101013;border-top:1px solid var(--line);display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+.foot div{display:flex;flex-direction:column;min-width:0}
+.foot span{font-size:11px;color:var(--muted)}
+.foot b{font-size:20px;font-variant-numeric:tabular-nums}
+.foot .open{color:var(--accent)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10;display:none;align-items:flex-end;justify-content:center}
+.modal.show{display:flex}
+.box{background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:560px;padding:18px 14px calc(18px + env(safe-area-inset-bottom))}
+.box .ttl{color:var(--muted);font-size:16px;text-align:center}
+.box .big{font-size:66px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;margin:4px 0;line-height:1.1}
+.box .brk{font-size:14px;color:#d4d0c9;text-align:center}
+.box .msg{font-size:17px;margin:4px 0 16px;line-height:1.6}
+.box .btns{display:grid;gap:10px}
+.box .two{grid-template-columns:1fr 1fr}
+.box .mt{margin-top:16px}
+.b-pp{min-height:84px;font-size:24px;font-weight:800;background:var(--pay);border:0;color:#fff}
+.b-cash{min-height:84px;font-size:24px;font-weight:800;background:var(--cash);border:0;color:#07140a}
+.b-x{min-height:54px}
+.b-ok{min-height:56px;background:var(--accent);color:#111;border:0;font-weight:800}
+.b-danger{min-height:56px;background:var(--danger);border:0;color:#fff;font-weight:800}
+</style>
+</head>
+<body>
+<div id="warn" class="warn"></div>
+<nav id="tabs" class="tabs"></nav>
+
+<div id="main">
+  <div class="head">
+    <div class="seatlabel">No.<b id="seatno">1</b></div>
+    <div id="total" class="total">¥0</div>
+  </div>
+  <div class="guest"><input id="guest" type="text" maxlength="30" placeholder="お客さんの名前（任意）" autocomplete="off" enterkeyhint="done"></div>
+  <div id="last" class="last"></div>
+  <div id="menu" class="menu"></div>
+  <div id="lines" class="lines"></div>
+  <div class="acts">
+    <button id="payBtn" class="pay" data-a="pay">会計</button>
+    <button class="reset" data-a="clear">伝票を<br>空にする</button>
+  </div>
+</div>
+
+<section class="done">
+  <h2>本日の会計済み<span id="doneCount"></span></h2>
+  <div id="doneList"></div>
+</section>
+
+<div class="export"><button data-a="export">📋 本日の会計をテキストで控える（コピー／共有）</button></div>
+
+<div class="danger"><button data-a="wipe">全リセット（営業終了後に・2段階確認）</button></div>
+
+<footer class="foot">
+  <div><span>本日合計 <em id="fCount"></em></span><b id="fTotal">¥0</b><span id="fOpen" class="open"></span></div>
+  <div><span>現金 <em id="fCashN"></em></span><b id="fCash">¥0</b></div>
+  <div><span>PayPay <em id="fPayN"></em></span><b id="fPay">¥0</b></div>
+</footer>
+
+<div id="modal" class="modal"><div id="box" class="box"></div></div>
+
+<script>
+(function () {
+'use strict';
+const KEY = 'bar-denpyo-v1';
+const $ = s => document.querySelector(s);
+const yen = n => '¥' + Number(n).toLocaleString('ja-JP');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const hm = t => { const d = new Date(t); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const mName = m => m === 'cash' ? '現金' : 'PayPay';
+
+/* ---------- 保存と復元 ---------- */
+function sumLines(ls) { return ls.reduce((a, l) => a + l.price * l.qty, 0); }
+function fresh() {
+  const seats = {};
+  for (let i = 1; i <= CONFIG.seats; i++) seats[i] = { lines: [], name: '' };
+  return { v: 1, cur: 1, seats, done: [], started: Date.now() };
+}
+const num = v => (Number.isFinite(+v) ? Math.round(+v) : 0);
+const cleanLines = ls => (Array.isArray(ls) ? ls : [])
+  .filter(l => l && typeof l === 'object')
+  .map(l => ({ name: String(l.name == null ? 'その他' : l.name).slice(0, 40), price: num(l.price), qty: num(l.qty) }))
+  .filter(l => l.qty > 0);
+function normalize(o) {
+  if (!o || typeof o !== 'object' || !o.seats || typeof o.seats !== 'object' || !Array.isArray(o.done)) throw new Error('bad');
+  for (let i = 1; i <= CONFIG.seats; i++) {
+    const st = o.seats[i] && typeof o.seats[i] === 'object' ? o.seats[i] : {};
+    o.seats[i] = { lines: cleanLines(st.lines), name: typeof st.name === 'string' ? st.name.slice(0, 30) : '' };
+  }
+  // 会計済みは1件も捨てずに形だけ整える（壊れた件でも金額は残す）
+  o.done = o.done.filter(d => d && typeof d === 'object').map(d => {
+    const lines = cleanLines(d.lines);
+    return {
+      id: String(d.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6))),
+      seat: num(d.seat), name: typeof d.name === 'string' ? d.name.slice(0, 30) : '',
+      lines, total: d.total != null ? num(d.total) : sumLines(lines),
+      method: d.method === 'paypay' ? 'paypay' : 'cash', at: num(d.at) || Date.now(),
+    };
+  });
+  o.cur = num(o.cur); if (!(o.cur >= 1 && o.cur <= CONFIG.seats)) o.cur = 1;
+  o.rev = num(o.rev); o.started = num(o.started) || Date.now();
+  return o;
+}
+let loadProblem = '', noSave = false;
+function load() {
+  let raw = null;
+  try { raw = localStorage.getItem(KEY); }
+  catch (e) { loadProblem = 'このブラウザでは保存が使えません。紙にも控えてください。'; return fresh(); }
+  if (!raw) return fresh();
+  try { return normalize(JSON.parse(raw)); }
+  catch (e) {
+    // 壊れたデータも捨てずに別名で退避
+    try { localStorage.setItem(KEY + '-broken-' + Date.now(), raw); }
+    catch (_) { noSave = true; loadProblem = '保存データが読めず、退避もできませんでした。元データを守るため保存を停止しています。紙で運用してください。'; return fresh(); }
+    loadProblem = '保存データが読めなかったため新規で開始しました（元データは退避済み）。';
+    return fresh();
+  }
+}
+let S = load();
+
+function readStored() {
+  try { const raw = localStorage.getItem(KEY); return raw ? normalize(JSON.parse(raw)) : null; } catch (_) { return null; }
+}
+function save() {
+  if (noSave) { showWarn('⚠ ' + loadProblem); return false; }
+  try {
+    // 別のタブ／画面で新しく保存されていたら、古い状態で上書きしない
+    const st = readStored();
+    if (st && st.rev > (S.rev || 0)) {
+      S = st;
+      say('別の画面で更新されていたため最新に読み直しました。今の操作をもう一度してください');
+      return false;
+    }
+    S.rev = (S.rev || 0) + 1;
+    localStorage.setItem(KEY, JSON.stringify(S));
+    if (!loadProblem) $('#warn').classList.remove('show');
+    return true;
+  } catch (e) {
+    showWarn('⚠ 保存に失敗しました。紙にも控えてください（プライベートモード／容量不足の可能性）');
+    return false;
+  }
+}
+function resync() {
+  const st = readStored();
+  if (st && st.rev > (S.rev || 0)) { S = st; render(); }
+}
+function showWarn(t) { const w = $('#warn'); w.textContent = t; w.classList.add('show'); }
+function commit() { const g = $('#guest'); if (document.activeElement === g) g.blur(); save(); render(); }
+
+/* ---------- 計算 ---------- */
+const seatTotal = n => sumLines(S.seats[n].lines);
+const brief = ls => ls.map(l => esc(l.name) + '×' + l.qty).join('　');
+
+/* ---------- 描画 ---------- */
+let lastMsg = '', lastHit = false;
+function render() {
+  const cur = S.cur, seat = S.seats[cur];
+
+  let h = '';
+  for (let i = 1; i <= CONFIG.seats; i++) {
+    const used = S.seats[i].lines.length > 0, nm = S.seats[i].name;
+    h += `<button class="tab${i === cur ? ' cur' : ''}${used || nm ? ' used' : ''}" data-a="seat" data-i="${i}">` +
+         `<span class="n">${i}</span><span class="a">${used ? yen(seatTotal(i)) : (nm ? '' : '空')}</span>` +
+         (nm ? `<span class="g">${esc(nm)}</span>` : '') + `</button>`;
+  }
+  $('#tabs').innerHTML = h;
+
+  const tot = seatTotal(cur);
+  $('#seatno').textContent = cur;
+  const gi = $('#guest');
+  if (document.activeElement !== gi || gi.dataset.seat != cur) { gi.value = seat.name || ''; gi.dataset.seat = cur; }
+  $('#total').textContent = yen(tot);
+
+  const last = $('#last');
+  last.textContent = lastMsg;
+  last.classList.toggle('hit', lastHit);
+
+  $('#lines').innerHTML = seat.lines.length
+    ? seat.lines.map((l, i) =>
+        `<div class="row"><div class="nm">${esc(l.name)}<span class="q">×${l.qty}</span></div>` +
+        `<div class="sub">${yen(l.price * l.qty)}</div>` +
+        `<button data-a="dec" data-i="${i}">−1</button>` +
+        `<button class="del" data-a="del" data-i="${i}">削除</button></div>`).join('')
+    : '<div class="empty">空き伝票 ― メニューをタップで1杯加算</div>';
+
+  const pb = $('#payBtn');
+  pb.disabled = tot === 0;
+  pb.textContent = tot ? '会計　' + yen(tot) : '会計';
+
+  $('#doneCount').textContent = S.done.length ? `（${S.done.length}件）` : '';
+  $('#doneList').innerHTML = S.done.length
+    ? S.done.map(d =>
+        `<div class="card"><div class="top"><span class="s">No.${d.seat}</span><span class="t">${hm(d.at)}</span>` +
+        `<span class="tag ${d.method}">${mName(d.method)}</span><span class="amt">${yen(d.total)}</span></div>` +
+        (d.name ? `<div class="gn">${esc(d.name)}</div>` : '') +
+        `<div class="items">${brief(d.lines)}</div>` +
+        `<div class="ops"><button data-a="swap" data-id="${esc(d.id)}">支払方法を変更</button>` +
+        `<button data-a="undo" data-id="${esc(d.id)}">伝票に戻す</button></div></div>`).join('')
+    : '<div class="empty">まだありません</div>';
+
+  let cash = 0, pp = 0, cn = 0, pn = 0, open = 0;
+  S.done.forEach(d => { if (d.method === 'cash') { cash += d.total; cn++; } else { pp += d.total; pn++; } });
+  for (let i = 1; i <= CONFIG.seats; i++) open += seatTotal(i);
+  $('#fTotal').textContent = yen(cash + pp);
+  $('#fCount').textContent = S.done.length ? S.done.length + '件' : '';
+  $('#fCash').textContent = yen(cash);
+  $('#fCashN').textContent = cn ? cn + '件' : '';
+  $('#fPay').textContent = yen(pp);
+  $('#fPayN').textContent = pn ? pn + '件' : '';
+  $('#fOpen').textContent = open ? '未会計 ' + yen(open) : '';
+}
+
+function renderMenu() {
+  const m = $('#menu');
+  m.style.gridTemplateColumns = `repeat(${CONFIG.menuColumns},1fr)`;
+  m.innerHTML = CONFIG.menu.map((x, i) =>
+    `<button class="mbtn" data-a="add" data-i="${i}">${esc(x.name)}<small>${yen(x.price)}</small></button>`).join('') +
+    `<button class="mbtn free" data-a="free">＋ 自由入力（品名・金額）</button>`;
+  $('#tabs').style.gridTemplateColumns = `repeat(${CONFIG.tabColumns || CONFIG.seats},1fr)`;
+}
+
+/* ---------- モーダル ---------- */
+let mh = {};
+function modal(html, handlers) { $('#box').innerHTML = html; mh = handlers || {}; $('#modal').classList.add('show'); }
+let blockUntil = 0; // 画面が変わった直後のタップを捨てる（2度押し対策）
+let tapX = -999, tapY = -999, bX = -999, bY = -999;
+const block = () => { blockUntil = Date.now() + 450; bX = tapX; bY = tapY; }; // 同じ位置の2回目だけ捨てる
+function closeModal() { $('#modal').classList.remove('show'); mh = {}; block(); }
+function ask(msg, okLabel, onOk, opt) {
+  opt = opt || {};
+  const ok = `<button class="${opt.danger ? 'b-danger' : 'b-ok'}" data-m="ok"${opt.delay ? ' disabled' : ''}>${okLabel}</button>`;
+  const x = `<button class="b-x" data-m="x">やめる</button>`;
+  modal(`<div class="msg">${msg}</div><div class="btns two">${opt.reverse ? x + ok : ok + x}</div>`,
+        { ok: () => { closeModal(); onOk(); }, x: closeModal });
+  if (opt.delay) setTimeout(() => { const b = $('#box [data-m="ok"]'); if (b) b.disabled = false; }, opt.delay);
+}
+
+/* ---------- 操作 ---------- */
+function say(t, hit) { lastMsg = t; lastHit = !!hit; }
+function buzz() { try { if (navigator.vibrate) navigator.vibrate(12); } catch (_) {} }
+
+function go(n) {
+  if (n < 1 || n > CONFIG.seats || n === S.cur) return;
+  S.cur = n; say(''); commit();
+}
+function add(i) {
+  const m = CONFIG.menu[i]; if (!m) return;
+  const ls = S.seats[S.cur].lines;
+  let l = ls.find(x => x.name === m.name && x.price === m.price);
+  if (l) l.qty++; else { l = { name: m.name, price: m.price, qty: 1 }; ls.push(l); }
+  say(`No.${S.cur}　${m.name} +1（計${l.qty}）`, true);
+  buzz(); commit();
+}
+function dec(i) {
+  const ls = S.seats[S.cur].lines, l = ls[i]; if (!l) return;
+  l.qty--;
+  say(`No.${S.cur}　${l.name} −1（計${l.qty}）`);
+  if (l.qty <= 0) { ls.splice(i, 1); block(); }
+  commit();
+}
+function del(i) {
+  const n = S.cur, ls = S.seats[n].lines, l = ls[i]; if (!l) return;
+  const doIt = () => {
+    const k = S.seats[n].lines.indexOf(l); if (k < 0) return;
+    S.seats[n].lines.splice(k, 1); block(); say(`No.${n}　${l.name} を削除`); commit();
+  };
+  if (l.qty >= 2) ask(`No.${n} の「${esc(l.name)} ×${l.qty}」を削除しますか？`, '削除する', doIt, { danger: true });
+  else doIt();
+}
+function openPay() {
+  const n = S.cur, ls = S.seats[n].lines, t = sumLines(ls);
+  if (!t) return;
+  modal(
+    `<div class="ttl">No.${n}${S.seats[n].name ? '　' + esc(S.seats[n].name) : ''} のお会計</div><div class="big">${yen(t)}</div><div class="brk">${brief(ls)}</div>` +
+    `<div class="btns two mt"><button class="b-pp" data-m="pp">PayPay</button><button class="b-cash" data-m="cash">現金</button></div>` +
+    `<div class="btns mt"><button class="b-x" data-m="x">戻る（会計しない）</button></div>`,
+    { pp: () => pay(n, 'paypay', t), cash: () => pay(n, 'cash', t), x: closeModal });
+}
+function pay(n, method, expected) {
+  closeModal();
+  const ls = S.seats[n].lines; if (!ls.length) return;
+  if (sumLines(ls) !== expected) { S.cur = n; say('金額が変わっていたので会計画面を開き直しました'); render(); openPay(); return; }
+  const lines = ls.map(l => ({ name: l.name, price: l.price, qty: l.qty }));
+  const total = sumLines(lines);
+  S.done.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), seat: n, name: S.seats[n].name || '', lines, total, method, at: Date.now() });
+  S.seats[n].lines = []; S.seats[n].name = '';
+  say(`No.${n}　会計済み ${yen(total)}（${mName(method)}）`, true);
+  buzz(); commit();
+}
+function clearSeat() {
+  const n = S.cur, t = seatTotal(n);
+  if (!S.seats[n].lines.length) {
+    if (S.seats[n].name) { S.seats[n].name = ''; say(`No.${n} の名前を消しました`); commit(); return; }
+    say(`No.${n} はすでに空です`); render(); return;
+  }
+  ask(`No.${n} に <b>未会計 ${yen(t)}</b> が残っています。<br>会計せずに伝票を空にしますか？<br><small>（お会計なら「会計」ボタンを使ってください）</small>`,
+      '空にする', () => { S.seats[n].lines = []; S.seats[n].name = ''; say(`No.${n} を空にしました`); commit(); }, { danger: true });
+}
+function findDone(id) { return S.done.findIndex(d => d.id === id); }
+function swapMethod(id) {
+  const d = S.done[findDone(id)]; if (!d) return;
+  const to = d.method === 'cash' ? 'paypay' : 'cash';
+  ask(`No.${d.seat}（${hm(d.at)}・${yen(d.total)}）の支払方法を<br><b>${mName(d.method)} → ${mName(to)}</b> に変更しますか？`, '変更する', () => {
+    const k = findDone(id); if (k < 0) return;
+    S.done[k].method = to; say(`No.${d.seat} の支払方法を ${mName(to)} に変更`); commit();
+  });
+}
+function firstEmpty() {
+  for (let i = 1; i <= CONFIG.seats; i++) if (!S.seats[i].lines.length && !S.seats[i].name) return i;
+  return 0;
+}
+function undoDone(id) {
+  const d = S.done[findDone(id)]; if (!d) return;
+  const to = firstEmpty();
+  if (!to) { ask(`空いている伝票がありません（${CONFIG.seats}枚すべて使用中）。<br>どれかを会計してから戻してください。`, 'OK', () => {}); return; }
+  ask(`${d.name ? esc(d.name) + '（' : '（'}${hm(d.at)}・${yen(d.total)}）を会計前に戻しますか？<br><b>空いている No.${to} に戻します。</b>`, '伝票に戻す', () => {
+    const k = findDone(id); if (k < 0) return;
+    const n = firstEmpty(); if (!n) return;
+    const rec = S.done.splice(k, 1)[0];
+    S.seats[n].lines = rec.lines.map(r => ({ name: r.name, price: r.price, qty: r.qty }));
+    S.seats[n].name = rec.name || '';
+    S.cur = n; say(`No.${n} に未会計で戻しました`); commit();
+    window.scrollTo(0, 0);
+  });
+}
+function wipe() {
+  let open = 0, openSeats = 0;
+  for (let i = 1; i <= CONFIG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openSeats++; } }
+  const doneSum = S.done.reduce((a, d) => a + d.total, 0);
+  ask(`全データを消去します。<br>・会計済み ${S.done.length}件　${yen(doneSum)}<br>・未会計 ${openSeats}枚　${yen(open)}<br><br>紙への書き写しは終わっていますか？`,
+      '次へ', () => {
+        ask(`<b>最終確認</b><br>本当にすべて消去しますか？元には戻せません。`, '完全に消去', () => {
+          { const r = S.rev; S = fresh(); S.rev = r; if (noSave) { try { localStorage.removeItem(KEY); } catch (_) {} noSave = false; loadProblem = ''; S.rev = 0; } } say('全リセットしました。新しい営業を開始できます'); commit(); window.scrollTo(0, 0);
+        }, { danger: true, reverse: true, delay: 900 });
+      }, { danger: true });
+}
+
+function addFree(name, price) {
+  const ls = S.seats[S.cur].lines;
+  let l = ls.find(x => x.name === name && x.price === price);
+  if (l) l.qty++; else { l = { name, price, qty: 1 }; ls.push(l); }
+  say(`No.${S.cur}　${name} ${yen(price)} +1（計${l.qty}）`, true);
+  buzz(); commit();
+}
+function openFree() {
+  const n = S.cur;
+  const nm = () => ($('#fName').value.trim() || 'その他');
+  const quick = v => () => { const name = nm(); closeModal(); S.cur = n; addFree(name, v); };
+  modal(
+    `<div class="ttl">No.${n} に自由入力で追加</div>` +
+    `<label>品名（空欄なら「その他」）</label><input id="fName" class="fld" type="text" maxlength="30" placeholder="その他" autocomplete="off">` +
+    `<div class="btns two mt">` +
+      `<button class="b-q" data-m="q800">¥800</button><button class="b-q" data-m="q900">¥900</button>` +
+      `<button class="b-q" data-m="q1000">¥1,000</button><button class="b-q other" data-m="other">その他<br><small>金額を入力</small></button>` +
+    `</div>` +
+    `<div id="fOther" style="display:none"><label>金額（円）</label>` +
+      `<input id="fPrice" class="fld price" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off">` +
+      `<div id="fErr" class="ferr"></div>` +
+      `<div class="btns"><button class="b-ok" data-m="ok">この金額で追加</button></div></div>` +
+    `<div class="btns mt"><button class="b-x" data-m="x">やめる</button></div>`,
+    {
+      q800: quick(800), q900: quick(900), q1000: quick(1000),
+      other: () => { $('#fOther').style.display = 'block'; $('#fPrice').focus(); },
+      ok: () => {
+        const raw = $('#fPrice').value.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[^0-9]/g, '');
+        const price = parseInt(raw, 10);
+        if (!(price > 0) || price > 9999999) { $('#fErr').textContent = '金額を入れてください'; return; }
+        const name = nm(); closeModal(); S.cur = n; addFree(name, price);
+      },
+      x: closeModal,
+    });
+}
+
+const guest = $('#guest');
+guest.addEventListener('input', () => {
+  const n = +guest.dataset.seat || S.cur;
+  S.seats[n].name = guest.value.slice(0, 30);
+  save();
+  // タブの名前だけ更新（入力中のカーソルを乱さない）
+  const tab = document.querySelector(`.tab[data-i="${n}"]`);
+  if (tab) render();
+});
+guest.addEventListener('keydown', e => { if (e.key === 'Enter') guest.blur(); });
+
+function exportText() {
+  const d0 = new Date(S.started || Date.now());
+  const ymd = `${d0.getFullYear()}/${d0.getMonth() + 1}/${d0.getDate()}`;
+  let cash = 0, pp = 0, cn = 0, pn = 0, open = 0, openN = 0;
+  S.done.forEach(d => { if (d.method === 'cash') { cash += d.total; cn++; } else { pp += d.total; pn++; } });
+  for (let i = 1; i <= CONFIG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openN++; } }
+  const L = [];
+  L.push(`【${ymd} 営業】`);
+  L.push(`本日合計 ${yen(cash + pp)}（${S.done.length}件）`);
+  L.push(`現金 ${yen(cash)}（${cn}件） / PayPay ${yen(pp)}（${pn}件）`);
+  if (open) L.push(`※未会計 ${yen(open)}（${openN}枚）`);
+  L.push('----------');
+  S.done.slice().reverse().forEach(d => {
+    L.push(`${hm(d.at)} ${d.name || '(名前なし)'} ${mName(d.method)} ${yen(d.total)}`);
+    L.push('  ' + d.lines.map(l => `${l.name}×${l.qty} ${yen(l.price * l.qty)}`).join(' / '));
+  });
+  if (open) {
+    L.push('---------- 未会計');
+    for (let i = 1; i <= CONFIG.seats; i++) {
+      const s = S.seats[i]; if (!s.lines.length) continue;
+      L.push(`No.${i} ${s.name || '(名前なし)'} ${yen(seatTotal(i))}`);
+      L.push('  ' + s.lines.map(l => `${l.name}×${l.qty} ${yen(l.price * l.qty)}`).join(' / '));
+    }
+  }
+  return L.join('\n');
+}
+function openExport() {
+  const txt = exportText();
+  const canShare = !!(navigator.share && window.isSecureContext);
+  modal(
+    `<div class="ttl">本日の会計（控え）</div><textarea id="exTxt" readonly></textarea><div id="exMsg" class="ferr"></div>` +
+    `<div class="btns ${canShare ? 'two' : ''}"><button class="b-ok" data-m="copy">コピー</button>` +
+    (canShare ? `<button class="b-ok" data-m="share">共有</button>` : '') + `</div>` +
+    `<div class="btns mt"><button class="b-x" data-m="x">閉じる</button></div>`,
+    {
+      copy: () => {
+        const ta = $('#exTxt'), msg = $('#exMsg');
+        const ok = () => { msg.style.color = 'var(--cash)'; msg.textContent = 'コピーしました。メモやLINEに貼り付けてください'; };
+        const fallback = () => {
+          try { ta.focus(); ta.setSelectionRange(0, ta.value.length); if (document.execCommand('copy')) { ok(); return; } } catch (_) {}
+          msg.textContent = 'コピーできませんでした。文字を長押しして全選択→コピーしてください';
+        };
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(ok, fallback); else fallback();
+      },
+      share: () => { navigator.share({ text: txt }).catch(() => {}); },
+      x: closeModal,
+    });
+  $('#exTxt').value = txt;
+}
+
+/* ---------- イベント ---------- */
+document.addEventListener('click', e => {
+  keepAwake();
+  if (Date.now() < blockUntil && Math.abs(e.clientX - bX) < 40 && Math.abs(e.clientY - bY) < 40) return;
+  tapX = e.clientX; tapY = e.clientY;
+  if (e.target.id === 'modal') { closeModal(); return; }
+  const b = e.target.closest('[data-a],[data-m]'); if (!b || b.disabled) return;
+  if (b.dataset.m) { const f = mh[b.dataset.m]; if (f) f(); return; }
+  const i = +b.dataset.i, id = b.dataset.id;
+  switch (b.dataset.a) {
+    case 'seat': go(i); break;
+    case 'add': add(i); break;
+    case 'dec': dec(i); break;
+    case 'del': del(i); break;
+    case 'pay': openPay(); break;
+    case 'clear': clearSeat(); break;
+    case 'swap': swapMethod(id); break;
+    case 'undo': undoDone(id); break;
+    case 'wipe': wipe(); break;
+    case 'free': openFree(); break;
+    case 'export': openExport(); break;
+  }
+});
+
+// 左右スワイプで伝票を移動（左へ払う＝次の番号）
+let sx = 0, sy = 0, st = 0;
+const main = $('#main');
+const EDGE = 28; // 画面端から始まるスワイプはiOSの「戻る」と衝突するので無視
+main.addEventListener('touchstart', e => { const t0 = e.touches[0];
+  if (e.target.closest('input') || t0.clientX < EDGE || t0.clientX > window.innerWidth - EDGE) { st = 0; return; }
+  const t = t0; sx = t.clientX; sy = t.clientY; st = Date.now(); }, { passive: true });
+main.addEventListener('touchend', e => {
+  const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+  if (Math.abs(dx) > 100 && Math.abs(dx) > Math.abs(dy) * 2 && st && Date.now() - st < 700) go(S.cur + (dx < 0 ? 1 : -1));
+}, { passive: true });
+
+// 画面が消えないようにする（対応ブラウザのみ）
+let wl = null;
+async function keepAwake() {
+  try {
+    if (wl || !('wakeLock' in navigator) || document.visibilityState !== 'visible') return;
+    wl = await navigator.wakeLock.request('screen');
+    wl.addEventListener('release', () => { wl = null; });
+  } catch (_) { wl = null; }
+}
+// 保存は操作のたびに行う。閉じる時に保存すると、閉じかけの古い画面が新しいデータを上書きしうるので行わない
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { resync(); keepAwake(); } });
+window.addEventListener('pageshow', resync);
+window.addEventListener('focus', resync);
+
+// 同じページを別タブで開いていた場合も最新状態に揃える
+window.addEventListener('storage', e => {
+  if (e.key !== KEY || !e.newValue) return;
+  try { S = normalize(JSON.parse(e.newValue)); render(); } catch (_) {}
+});
+
+// ブラウザに「消さないで」と依頼（対応環境のみ）
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (_) {}
+
+// オフライン起動用（https で公開したときだけ有効。ファイル直開きでは何もしない）
+try { if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (_) {}
+
+renderMenu();
+render();
+if (loadProblem) showWarn('⚠ ' + loadProblem);
+// 起動時は書き込まず、保存できる環境かだけ確かめる
+else { try { localStorage.setItem(KEY + '-test', '1'); localStorage.removeItem(KEY + '-test'); }
+       catch (_) { showWarn('⚠ 保存が使えません。紙にも控えてください（プライベートモード／容量不足の可能性）'); } }
+})();
+</script>
+</body>
+</html>
