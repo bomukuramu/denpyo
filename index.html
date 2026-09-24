@@ -53,7 +53,9 @@ em{font-style:normal}
 .tab.cur{background:var(--accent);color:#111;border-color:var(--accent)}
 .tab.cur .a{color:#111}
 .tab .g{font-size:10px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px;color:var(--text)}
-.guest{padding:6px 10px 0}
+.guest{padding:6px 10px 0;display:flex;align-items:center;gap:8px}
+.guest input{width:auto;flex:0 1 66%;min-width:0;min-height:44px;font-size:17px}
+.guest .san{font-size:18px;color:var(--muted)}
 .guest input,.fld{width:100%;min-height:48px;font:inherit;font-size:18px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 12px;-webkit-user-select:text;user-select:text}
 .guest input::placeholder,.fld::placeholder{color:#6d6a64}
 .guest input:focus,.fld:focus{outline:none;border-color:var(--accent)}
@@ -136,7 +138,7 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
     <div class="seatlabel">No.<b id="seatno">1</b></div>
     <div id="total" class="total">¥0</div>
   </div>
-  <div class="guest"><input id="guest" type="text" maxlength="30" placeholder="お客さんの名前（任意）" autocomplete="off" enterkeyhint="done"></div>
+  <div class="guest"><input id="guest" type="text" maxlength="20" placeholder="名前（任意）" autocomplete="off" enterkeyhint="done"><span class="san">さん</span></div>
   <div id="last" class="last"></div>
   <div id="menu" class="menu"></div>
   <div id="lines" class="lines"></div>
@@ -171,6 +173,7 @@ const $ = s => document.querySelector(s);
 const yen = n => '¥' + Number(n).toLocaleString('ja-JP');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const hm = t => { const d = new Date(t); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const san = n => (n ? (/(さん|様|ちゃん|くん|君)$/.test(n) ? n : n + 'さん') : '');
 const mName = m => m === 'cash' ? '現金' : 'PayPay';
 
 /* ---------- 保存と復元 ---------- */
@@ -296,7 +299,7 @@ function render() {
     ? S.done.map(d =>
         `<div class="card"><div class="top"><span class="s">No.${d.seat}</span><span class="t">${hm(d.at)}</span>` +
         `<span class="tag ${d.method}">${mName(d.method)}</span><span class="amt">${yen(d.total)}</span></div>` +
-        (d.name ? `<div class="gn">${esc(d.name)}</div>` : '') +
+        (d.name ? `<div class="gn">${esc(san(d.name))}</div>` : '') +
         `<div class="items">${brief(d.lines)}</div>` +
         `<div class="ops"><button data-a="swap" data-id="${esc(d.id)}">支払方法を変更</button>` +
         `<button data-a="undo" data-id="${esc(d.id)}">伝票に戻す</button></div></div>`).join('')
@@ -375,7 +378,7 @@ function openPay() {
   const n = S.cur, ls = S.seats[n].lines, t = sumLines(ls);
   if (!t) return;
   modal(
-    `<div class="ttl">No.${n}${S.seats[n].name ? '　' + esc(S.seats[n].name) : ''} のお会計</div><div class="big">${yen(t)}</div><div class="brk">${brief(ls)}</div>` +
+    `<div class="ttl">No.${n}${S.seats[n].name ? '　' + esc(san(S.seats[n].name)) : ''} のお会計</div><div class="big">${yen(t)}</div><div class="brk">${brief(ls)}</div>` +
     `<div class="btns two mt"><button class="b-pp" data-m="pp">PayPay</button><button class="b-cash" data-m="cash">現金</button></div>` +
     `<div class="btns mt"><button class="b-x" data-m="x">戻る（会計しない）</button></div>`,
     { pp: () => pay(n, 'paypay', t), cash: () => pay(n, 'cash', t), x: closeModal });
@@ -417,7 +420,7 @@ function undoDone(id) {
   const d = S.done[findDone(id)]; if (!d) return;
   const to = firstEmpty();
   if (!to) { ask(`空いている伝票がありません（${CONFIG.seats}枚すべて使用中）。<br>どれかを会計してから戻してください。`, 'OK', () => {}); return; }
-  ask(`${d.name ? esc(d.name) + '（' : '（'}${hm(d.at)}・${yen(d.total)}）を会計前に戻しますか？<br><b>空いている No.${to} に戻します。</b>`, '伝票に戻す', () => {
+  ask(`${d.name ? esc(san(d.name)) + '（' : '（'}${hm(d.at)}・${yen(d.total)}）を会計前に戻しますか？<br><b>空いている No.${to} に戻します。</b>`, '伝票に戻す', () => {
     const k = findDone(id); if (k < 0) return;
     const n = firstEmpty(); if (!n) return;
     const rec = S.done.splice(k, 1)[0];
@@ -499,14 +502,14 @@ function exportText() {
   if (open) L.push(`※未会計 ${yen(open)}（${openN}枚）`);
   L.push('----------');
   S.done.slice().reverse().forEach(d => {
-    L.push(`${hm(d.at)} ${d.name || '(名前なし)'} ${mName(d.method)} ${yen(d.total)}`);
+    L.push(`${hm(d.at)} ${san(d.name) || '(名前なし)'} ${mName(d.method)} ${yen(d.total)}`);
     L.push('  ' + d.lines.map(l => `${l.name}×${l.qty} ${yen(l.price * l.qty)}`).join(' / '));
   });
   if (open) {
     L.push('---------- 未会計');
     for (let i = 1; i <= CONFIG.seats; i++) {
       const s = S.seats[i]; if (!s.lines.length) continue;
-      L.push(`No.${i} ${s.name || '(名前なし)'} ${yen(seatTotal(i))}`);
+      L.push(`No.${i} ${san(s.name) || '(名前なし)'} ${yen(seatTotal(i))}`);
       L.push('  ' + s.lines.map(l => `${l.name}×${l.qty} ${yen(l.price * l.qty)}`).join(' / '));
     }
   }
