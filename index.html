@@ -592,7 +592,7 @@ function openFree() {
       },
       x: closeModal,
     });
-  $('#fName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+  $('#fName').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); e.target.blur(); } });
   $('#fPrice').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const f = mh.ok; if (f) f(); } });
 }
 
@@ -600,12 +600,12 @@ const guest = $('#guest');
 guest.addEventListener('input', () => {
   const n = +guest.dataset.seat || S.cur;
   S.seats[n].name = guest.value.slice(0, 30);
-  save();
+  if (save()) scheduleOpenSync();
   // タブの名前だけ更新（入力中のカーソルを乱さない）
   const tab = document.querySelector(`.tab[data-i="${n}"]`);
   if (tab) render();
 });
-guest.addEventListener('keydown', e => { if (e.key === 'Enter') guest.blur(); });
+guest.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) guest.blur(); }); // 日本語の変換確定では閉じない
 
 function exportText() {
   const d0 = new Date(S.started || Date.now());
@@ -661,16 +661,21 @@ function openExport() {
    ・送り先URLはこのスマホの中だけに保存（公開しているコードには書かない）
    ・送れなかった分は溜めておき、電波が戻ったら自動で送り直す
    ・送信に失敗しても、伝票や会計の操作には一切影響しない */
-const SYNC_KEY = KEY + '-sync', OUT_KEY = KEY + '-outbox';
-let syncUrl = '', outbox = [], syncing = false, lastOk = 0, lastErr = '', openTimer = null, openDirty = false;
+const SYNC_KEY = KEY + '-sync', OUT_KEY = KEY + '-outbox', STUCK_KEY = KEY + '-stuck';
+let syncUrl = '', outbox = [], stuck = [], syncing = false, lastOk = 0, lastErr = '', openTimer = null, openDirty = false, failEid = '', failCount = 0;
 try { syncUrl = (JSON.parse(localStorage.getItem(SYNC_KEY) || '{}').url) || ''; } catch (_) {}
-try { const o = JSON.parse(localStorage.getItem(OUT_KEY) || '[]'); if (Array.isArray(o)) outbox = o; } catch (_) {}
-function saveOutbox() { try { localStorage.setItem(OUT_KEY, JSON.stringify(outbox)); } catch (_) {} }
+// 送信待ちは毎回スマホの保存から読み直す（別の画面で増えた分を消さないため）
+function loadList(k) { try { const o = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(o) ? o : []; } catch (_) { return []; } }
+function saveList(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
+function reloadOutbox() { outbox = loadList(OUT_KEY); stuck = loadList(STUCK_KEY); }
+function saveOutbox() { saveList(OUT_KEY, outbox); }
+reloadOutbox();
 function queueSync(ev) {
   if (!syncUrl) return;
   ev.eid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  outbox.push(ev); saveOutbox(); syncStatus(); flush();
+  reloadOutbox(); outbox.push(ev); saveOutbox(); syncStatus(); flush();
 }
+function dropFromOutbox(eid) { reloadOutbox(); outbox = outbox.filter(x => x.eid !== eid); saveOutbox(); }
 function openSnapshot() {
   const slips = [];
   for (let i = 1; i <= CFG.seats; i++) {
@@ -689,7 +694,7 @@ async function post(body) {
   try {
     const r = await fetch(syncUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), redirect: 'follow', signal: ctl ? ctl.signal : undefined });
     const j = await r.json();
-    if (!j || !j.ok) throw new Error((j && j.error) || '受け取り側でエラー');
+    if (!j || !j.ok) { const er = new Error((j && j.error) || '受け取り側でエラー'); er.server = true; throw er; }
   } finally { clearTimeout(t); }
 }
 async function flush() {
@@ -697,9 +702,19 @@ async function flush() {
   if (navigator.onLine === false) { lastErr = '圏外'; syncStatus(); return; }
   syncing = true;
   try {
+    reloadOutbox();
     while (outbox.length) {
-      await post(outbox[0]);
-      outbox.shift(); saveOutbox(); lastOk = Date.now(); lastErr = '';
+      const ev = outbox[0];
+      try { await post(ev); }
+      catch (e) {
+        // 受け取り側が同じ記録を3回続けて断ったら、それだけ脇に置いて次を送る（全部が止まらないように）
+        if (e.server) {
+          failCount = failEid === ev.eid ? failCount + 1 : 1; failEid = ev.eid;
+          if (failCount >= 3) { dropFromOutbox(ev.eid); stuck.push(ev); saveList(STUCK_KEY, stuck); failCount = 0; continue; }
+        }
+        throw e;
+      }
+      dropFromOutbox(ev.eid); lastOk = Date.now(); lastErr = '';
     }
     if (openDirty) { openDirty = false; await post(openSnapshot()); lastOk = Date.now(); lastErr = ''; }
   } catch (e) {
@@ -711,6 +726,8 @@ function syncStatus() {
   el.className = 'syncstat';
   if (!syncUrl) { el.textContent = '未設定（押すと設定できます）'; return; }
   const n = outbox.length;
+  const stk = stuck.length ? `／要確認 ${stuck.length}件（控えテキストで確認してください）` : '';
+  if (stk) { el.classList.add('ng'); el.textContent = (n ? `未送信 ${n}件` : '送信済み') + stk; return; }
   if (n) { el.classList.add(lastErr ? 'ng' : 'wait'); el.textContent = `未送信 ${n}件${lastErr ? '（' + lastErr + '・電波が戻ったら自動で再送）' : '（送信中）'}`; return; }
   if (lastErr) { el.classList.add('ng'); el.textContent = `${lastErr}（あとで自動で再送します）`; return; }
   el.classList.add('ok'); el.textContent = lastOk ? `送信済み（最終 ${hm(lastOk)}）` : '設定済み';
@@ -743,8 +760,11 @@ function openSync() {
         syncStatus();
       },
       off: () => {
-        ask('バックアップの送信をやめますか？<br><small>スプレッドシートにある記録は消えません。</small>', 'やめる', () => {
-          syncUrl = ''; outbox = []; saveOutbox();
+        reloadOutbox();
+        const left = outbox.length + stuck.length;
+        ask('バックアップの送信をやめますか？<br><small>スプレッドシートにある記録は消えません。</small>' +
+            (left ? `<br><b>※まだ送れていない ${left}件は、送られずに捨てられます。</b>` : ''), 'やめる', () => {
+          syncUrl = ''; outbox = []; stuck = []; saveOutbox(); saveList(STUCK_KEY, stuck);
           try { localStorage.removeItem(SYNC_KEY); } catch (_) {}
           syncStatus();
         });
