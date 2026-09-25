@@ -66,6 +66,9 @@ body{padding-top:env(safe-area-inset-top)}
 .guest input:focus,.fld:focus{outline:none;border-color:var(--accent)}
 .mbtn.free{grid-column:1/-1;min-height:56px;flex-direction:row;gap:8px;border-style:dashed;color:var(--accent)}
 .box label{display:block;font-size:14px;color:var(--muted);margin:10px 0 6px}
+.prow{display:flex;gap:8px;align-items:stretch}
+.prow .fld{flex:1;min-width:0}
+.prow .b-ok{flex:0 0 96px;font-size:18px}
 .fld.price{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
 .b-q{min-height:72px;font-size:24px;font-weight:800;line-height:1.2}
 .b-q.other{font-size:18px;color:var(--accent)}
@@ -562,9 +565,9 @@ function openFree() {
       `<button class="b-q" data-m="q1000">¥1,000</button><button class="b-q other" data-m="other">その他<br><small>金額を入力</small></button>` +
     `</div>` +
     `<div id="fOther" style="display:none"><label>金額（円）</label>` +
-      `<input id="fPrice" class="fld price" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off">` +
-      `<div id="fErr" class="ferr"></div>` +
-      `<div class="btns"><button class="b-ok" data-m="ok">この金額で追加</button></div></div>` +
+      `<div class="prow"><input id="fPrice" class="fld price" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" autocomplete="off">` +
+      `<button class="b-ok" data-m="ok">追加</button></div>` +
+      `<div id="fErr" class="ferr"></div></div>` +
     `<div class="btns mt"><button class="b-x" data-m="x">やめる</button></div>`,
     {
       q800: quick(800), q900: quick(900), q1000: quick(1000),
@@ -577,6 +580,8 @@ function openFree() {
       },
       x: closeModal,
     });
+  $('#fName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+  $('#fPrice').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const f = mh.ok; if (f) f(); } });
 }
 
 const guest = $('#guest');
@@ -643,6 +648,8 @@ function openExport() {
 /* ---------- イベント ---------- */
 document.addEventListener('click', e => {
   keepAwake();
+  const ae = document.activeElement;
+  if (ae && ae.tagName === 'INPUT' && !e.target.closest('input')) ae.blur();
   if (Date.now() < blockUntil && Math.abs(e.clientX - bX) < 40 && Math.abs(e.clientY - bY) < 40) return;
   tapX = e.clientX; tapY = e.clientY;
   if (e.target.id === 'modal') { closeModal(); return; }
@@ -675,7 +682,7 @@ main.addEventListener('touchstart', e => { const t0 = e.touches[0];
   const t = t0; sx = t.clientX; sy = t.clientY; st = Date.now(); }, { passive: true });
 main.addEventListener('touchend', e => {
   const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
-  if (Math.abs(dx) > 100 && Math.abs(dx) > Math.abs(dy) * 2 && st && Date.now() - st < 700) { const v = visibleSlots(), k = v.indexOf(S.cur); const t = v[k + (dx < 0 ? 1 : -1)]; if (t) go(t); }
+  if (Math.abs(dx) > 100 && Math.abs(dy) < 40 && Math.abs(dx) > Math.abs(dy) * 2 && st && Date.now() - st < 700) { const v = visibleSlots(), k = v.indexOf(S.cur); const t = v[k + (dx < 0 ? 1 : -1)]; if (t) go(t); }
 }, { passive: true });
 
 // 画面が消えないようにする（対応ブラウザのみ）
