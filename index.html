@@ -435,7 +435,7 @@ function closeModal() { $('#modal').classList.remove('show'); mh = {}; block(); 
 function ask(msg, okLabel, onOk, opt) {
   opt = opt || {};
   const ok = `<button class="${opt.danger ? 'b-danger' : 'b-ok'}" data-m="ok"${opt.delay ? ' disabled' : ''}>${okLabel}</button>`;
-  const x = `<button class="b-x" data-m="x">やめる</button>`;
+  const x = `<button class="b-x" data-m="x">${opt.cancel || 'やめる'}</button>`;
   modal(`<div class="msg">${msg}</div><div class="btns two">${opt.reverse ? x + ok : ok + x}</div>`,
         { ok: () => { closeModal(); onOk(); }, x: closeModal });
   if (opt.delay) setTimeout(() => { const b = $('#box [data-m="ok"]'); if (b) b.disabled = false; }, opt.delay);
@@ -553,7 +553,7 @@ function wipe() {
   ask(`全データを消去します。<br>・会計済み ${S.done.length}件　${yen(doneSum)}<br>・未会計 ${openSeats}枚　${yen(open)}<br><br>紙への書き写しは終わっていますか？`,
       '次へ', () => {
         ask(`<b>最終確認</b><br>本当にすべて消去しますか？元には戻せません。`, '完全に消去', () => {
-          { const r = S.rev; S = fresh(); S.rev = r; if (noSave) { try { localStorage.removeItem(KEY); } catch (_) {} noSave = false; loadProblem = ''; S.rev = 0; } } say('全リセットしました。新しい営業を開始できます'); commit(); window.scrollTo(0, 0);
+          { const r = S.rev; S = fresh(); S.rev = r; stuck = []; saveList(STUCK_KEY, stuck); syncStatus(); if (noSave) { try { localStorage.removeItem(KEY); } catch (_) {} noSave = false; loadProblem = ''; S.rev = 0; } } say('全リセットしました。新しい営業を開始できます'); commit(); window.scrollTo(0, 0);
         }, { danger: true, reverse: true, delay: 900 });
       }, { danger: true });
 }
@@ -619,8 +619,9 @@ function exportText() {
   L.push(`現金 ${yen(cash)}（${cn}件） / PayPay ${yen(pp)}（${pn}件）`);
   if (open) L.push(`※未会計 ${yen(open)}（${openN}枚）`);
   L.push('----------');
+  const uns = syncUrl ? unsentIds() : new Set();
   S.done.slice().reverse().forEach(d => {
-    L.push(`${hm(d.at)} ${san(d.name) || '(名前なし)'} ${mName(d.method)} ${yen(d.total)}`);
+    L.push(`${hm(d.at)} ${san(d.name) || '(名前なし)'} ${mName(d.method)} ${yen(d.total)}${uns.has(d.id) ? ' ※未バックアップ' : ''}`);
     L.push('  ' + d.lines.map(l => `${l.name}×${l.qty} ${yen(l.price * l.qty)}`).join(' / '));
   });
   if (open) {
@@ -676,6 +677,16 @@ function queueSync(ev) {
   reloadOutbox(); outbox.push(ev); saveOutbox(); syncStatus(); flush();
 }
 function dropFromOutbox(eid) { reloadOutbox(); outbox = outbox.filter(x => x.eid !== eid); saveOutbox(); }
+// 脇に置いた記録を、送信待ちの最後に戻してもう一度試す（起動時・送信が成功した後。1分に1回まで）
+let stuckRetried = 0;
+function retryStuck() {
+  reloadOutbox(); if (!stuck.length || Date.now() - stuckRetried < 60000) return false;
+  stuckRetried = Date.now();
+  outbox = outbox.concat(stuck.filter(x => !outbox.some(o => o.eid === x.eid))); stuck = [];
+  saveOutbox(); saveList(STUCK_KEY, stuck); return true;
+}
+// 控えテキスト用：まだシートに届いていない会計のID
+function unsentIds() { reloadOutbox(); return new Set(outbox.concat(stuck).filter(e => e.type === 'paid').map(e => e.rec && e.rec.id)); }
 function openSnapshot() {
   const slips = [];
   for (let i = 1; i <= CFG.seats; i++) {
@@ -715,6 +726,7 @@ async function flush() {
         throw e;
       }
       dropFromOutbox(ev.eid); lastOk = Date.now(); lastErr = '';
+      if (!outbox.length && retryStuck()) reloadOutbox();
     }
     if (openDirty) { openDirty = false; await post(openSnapshot()); lastOk = Date.now(); lastErr = ''; }
   } catch (e) {
@@ -726,7 +738,7 @@ function syncStatus() {
   el.className = 'syncstat';
   if (!syncUrl) { el.textContent = '未設定（押すと設定できます）'; return; }
   const n = outbox.length;
-  const stk = stuck.length ? `／要確認 ${stuck.length}件（控えテキストで確認してください）` : '';
+  const stk = stuck.length ? `／要確認 ${stuck.length}件（控えテキストに「未バックアップ」と印が付きます。自動で再送します）` : '';
   if (stk) { el.classList.add('ng'); el.textContent = (n ? `未送信 ${n}件` : '送信済み') + stk; return; }
   if (n) { el.classList.add(lastErr ? 'ng' : 'wait'); el.textContent = `未送信 ${n}件${lastErr ? '（' + lastErr + '・電波が戻ったら自動で再送）' : '（送信中）'}`; return; }
   if (lastErr) { el.classList.add('ng'); el.textContent = `${lastErr}（あとで自動で再送します）`; return; }
@@ -763,11 +775,11 @@ function openSync() {
         reloadOutbox();
         const left = outbox.length + stuck.length;
         ask('バックアップの送信をやめますか？<br><small>スプレッドシートにある記録は消えません。</small>' +
-            (left ? `<br><b>※まだ送れていない ${left}件は、送られずに捨てられます。</b>` : ''), 'やめる', () => {
+            (left ? `<br><b>※まだ送れていない ${left}件は、送られずに捨てられます。</b>` : ''), '送信をやめる', () => {
           syncUrl = ''; outbox = []; stuck = []; saveOutbox(); saveList(STUCK_KEY, stuck);
           try { localStorage.removeItem(SYNC_KEY); } catch (_) {}
           syncStatus();
-        });
+        }, { danger: true, cancel: '続ける' });
       },
       x: closeModal,
     });
@@ -845,7 +857,7 @@ try { if ('serviceWorker' in navigator && location.protocol === 'https:') naviga
 
 renderMenu();
 render();
-syncStatus(); flush();
+retryStuck(); syncStatus(); flush();
 // 下に固定した会計バーの高さに合わせて、ページ下の余白を自動で取る（最後の項目が隠れないように）
 function fitFoot() { document.body.style.paddingBottom = ($('.foot').offsetHeight + 16) + 'px'; }
 fitFoot(); window.addEventListener('resize', fitFoot);
