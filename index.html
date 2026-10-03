@@ -29,8 +29,8 @@ const CONFIG = {
     { name: 'レモンサワー',   price: 900 },
     { name: 'トマト割り',     price: 1000 },
     { name: '日本酒',         price: 800 },
-    { name: 'クライナー',     price: 3000 },
-    { name: 'シャンパン',     price: 8000 },
+    { name: 'ソフトドリンク', price: 800 },
+    { name: '芋・麦',         price: 800 },
   ],
 };
 </script>
@@ -238,7 +238,7 @@ const FALLBACK = {
   menu: [
     { name: 'チャージ', price: 800 }, { name: 'お茶割り', price: 800 }, { name: 'ビール', price: 800 },
     { name: 'ハイボール', price: 800 }, { name: 'レモンサワー', price: 900 }, { name: 'トマト割り', price: 1000 },
-    { name: '日本酒', price: 800 }, { name: 'クライナー', price: 3000 }, { name: 'シャンパン', price: 8000 },
+    { name: '日本酒', price: 800 }, { name: 'ソフトドリンク', price: 800 }, { name: '芋・麦', price: 800 },
   ],
 };
 let cfgProblem = '', usingFallback = false;
@@ -267,6 +267,9 @@ const san = n => (n ? (/(さん|様|ちゃん|くん|君)$/.test(n) ? n : n + '�
 const mName = m => m === 'cash' ? '現金' : 'PayPay';
 
 /* ---------- 保存と復元 ---------- */
+// 営業日：朝6時より前は前の日の営業として扱う
+function bizDay(ts) { const d = new Date(ts - 6 * 3600 * 1000); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`; }
+function firstSaleAt() { return S.done.length ? Math.min(...S.done.map(d => d.at)) : Date.now(); }
 function sumLines(ls) { return ls.reduce((a, l) => a + l.price * l.qty, 0); }
 function fresh() {
   const seats = {};
@@ -550,9 +553,17 @@ function wipe() {
   let open = 0, openSeats = 0;
   for (let i = 1; i <= CFG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openSeats++; } }
   const doneSum = S.done.reduce((a, d) => a + d.total, 0);
-  ask(`全データを消去します。<br>・会計済み ${S.done.length}件　${yen(doneSum)}<br>・未会計 ${openSeats}枚　${yen(open)}<br><br>紙への書き写しは終わっていますか？`,
+  let unsent = 0; if (syncUrl) { reloadOutbox(); unsent = unsentIds().size; }
+  ask(`全データを消去します。<br>・会計済み ${S.done.length}件　${yen(doneSum)}<br>・未会計 ${openSeats}枚　${yen(open)}` +
+      (syncUrl ? `<br>・スプレッドシートは今日の分を「${bizDay(firstSaleAt())}」のシートにまとめます` : '') +
+      (unsent ? `<br><b style="color:#ff9d9a">※まだシートに届いていない会計が ${unsent}件あります（控えテキストに印が付きます）</b>` : '') + `<br><br>紙への書き写しは終わっていますか？`,
       '次へ', () => {
         ask(`<b>最終確認</b><br>本当にすべて消去しますか？元には戻せません。`, '完全に消去', () => {
+          if (syncUrl && S.done.length) {
+            let cash = 0, pp = 0;
+            S.done.forEach(d => { if (d.method === 'cash') cash += d.total; else pp += d.total; });
+            queueSync({ type: 'close', rec: { id: 'close-' + Date.now().toString(36), firstAt: firstSaleAt(), count: S.done.length, total: cash + pp, cash, paypay: pp } });
+          }
           { const r = S.rev; S = fresh(); S.rev = r; stuck = []; saveList(STUCK_KEY, stuck); syncStatus(); if (noSave) { try { localStorage.removeItem(KEY); } catch (_) {} noSave = false; loadProblem = ''; S.rev = 0; } } say('全リセットしました。新しい営業を開始できます'); commit(); window.scrollTo(0, 0);
         }, { danger: true, reverse: true, delay: 900 });
       }, { danger: true });
@@ -608,8 +619,7 @@ guest.addEventListener('input', () => {
 guest.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) guest.blur(); }); // 日本語の変換確定では閉じない
 
 function exportText() {
-  const d0 = new Date(S.started || Date.now());
-  const ymd = `${d0.getFullYear()}/${d0.getMonth() + 1}/${d0.getDate()}`;
+  const ymd = bizDay(firstSaleAt());
   let cash = 0, pp = 0, cn = 0, pn = 0, open = 0, openN = 0;
   S.done.forEach(d => { if (d.method === 'cash') { cash += d.total; cn++; } else { pp += d.total; pn++; } });
   for (let i = 1; i <= CFG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openN++; } }
