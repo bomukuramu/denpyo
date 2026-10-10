@@ -687,11 +687,15 @@ function exportText() {
   S.done.forEach(d => { if (d.method === 'cash') { cash += d.total; cn++; } else { pp += d.total; pn++; } });
   for (let i = 1; i <= CFG.seats; i++) { const t = seatTotal(i); if (t) { open += t; openN++; } }
   const L = [];
-  L.push(`【${ymd} 営業】`);
-  L.push(`本日合計 ${yen(cash + pp)}（${S.done.length}件）`);
-  L.push(`現金 ${yen(cash)}（${cn}件） / PayPay ${yen(pp)}（${pn}件）`);
-  if (open) L.push(`※未会計 ${yen(open)}（${openN}枚）`);
-  L.push('----------');
+  const en = n => Number(n).toLocaleString('ja-JP') + '円';
+  L.push(ymd.replace(/^\d+\//, ''));            // 例：10/4
+  L.push(`PayPay　${en(pp)}`);
+  L.push(`現金　${en(cash)}`);
+  L.push(`合計　${en(cash + pp)}`);
+  L.push(`財布内　${en(cash)}`);
+  if (open) L.push(`※未会計　${en(open)}（${openN}枚）`);
+  L.push('');
+  L.push(`---------- 明細（${S.done.length}件）`);
   const uns = syncUrl ? unsentIds() : new Set();
   S.done.slice().reverse().forEach(d => {
     L.push(`${hm(d.at)} ${san(d.name) || '(名前なし)'} ${mName(d.method)} ${yen(d.total)}${uns.has(d.id) ? ' ※未バックアップ' : ''}`);
