@@ -1,7 +1,7 @@
 // バー伝票：オフライン起動用
 // 開くたびに保存済みの画面をすぐ表示し、ネットがあれば裏で最新版を取り込む（次回起動から反映）
 // ※ 伝票データ（localStorage）には一切触れません
-const CACHE = 'bar-denpyo-v1';
+const CACHE = 'bar-denpyo-v2';
 const ASSETS = ['./', './index.html'];
 
 self.addEventListener('install', e => {
@@ -23,7 +23,7 @@ self.addEventListener('fetch', e => {
     caches.open(CACHE).then(cache =>
       cache.match(req, { ignoreSearch: true }).then(hit => {
         const net = fetch(req).then(res => {
-          if (res && res.ok) cache.put(req, res.clone());
+          if (res && res.ok) cache.put(req.url.split('?')[0], res.clone());  // 「?…」付きでも同じ場所に保存する
           return res;
         }).catch(() => hit || cache.match('./index.html'));
         return hit || net;
