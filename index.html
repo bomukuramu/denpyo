@@ -124,12 +124,20 @@ body{padding-top:env(safe-area-inset-top)}
 .row .nn{font-size:17px;font-weight:700;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .nq{display:flex;align-items:baseline;gap:10px;line-height:1.2}
 .row .q{font-weight:900;color:var(--accent);font-size:19px}
+.row .tm{font-size:14px;color:#c9c4ba;font-variant-numeric:tabular-nums}
+.row .tm::before{content:'🕘';font-size:11px;margin-right:2px;opacity:.7}
 .row .sub{font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px}
 .row button{min-width:52px;min-height:48px;font-size:15px;padding:0 4px}
 .row .inc{color:var(--accent);font-weight:700}
 .row .del{color:#ff9d9a;background:#45201f;border-color:#6e3330;margin-left:10px}
 .empty{padding:16px;text-align:center;color:var(--muted)}
-.acts{display:flex;justify-content:flex-end;gap:8px;padding:12px 10px}
+.acts{display:flex;justify-content:space-between;gap:8px;padding:12px 10px}
+.hist{min-width:150px;font-size:14px;padding:0 12px;white-space:nowrap}
+.loglist{margin:8px 0 4px;max-height:55vh;overflow-y:auto;border:1px solid var(--line);border-radius:10px}
+.loglist div{display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:16px}
+.loglist div:last-child{border-bottom:0}
+.loglist b{font-variant-numeric:tabular-nums;color:var(--accent);min-width:46px}
+.loglist .new{background:#2a2414}
 .tab.plus{color:var(--accent);border-style:dashed}
 .tab.plus .a{color:var(--accent);font-size:9px;font-weight:400}
 .pay{flex:1;min-height:66px;font-size:22px;font-weight:800;background:var(--accent);color:#111;border:0}
@@ -234,6 +242,7 @@ h2{font-size:15px;color:var(--muted);margin:0 4px 8px;font-weight:600}
   <div id="menu" class="menu"></div>
   <div id="lines" class="lines"></div>
   <div class="acts">
+    <button class="hist" data-a="hist">🕘 この伝票の履歴</button>
     <button class="reset" data-a="clear">伝票を空にする</button>
   </div>
 </div>
@@ -325,19 +334,22 @@ function dayCheck() {
 function sumLines(ls) { return ls.reduce((a, l) => a + l.price * l.qty, 0); }
 function fresh() {
   const seats = {};
-  for (let i = 1; i <= CFG.seats; i++) seats[i] = { lines: [], name: '' };
+  for (let i = 1; i <= CFG.seats; i++) seats[i] = { lines: [], name: '', log: [] };
   return { v: 1, cur: 1, seats, done: [], started: Date.now() };
 }
 const num = v => (Number.isFinite(+v) ? Math.round(+v) : 0);
+// 操作の記録（時刻と内容）。1枚の伝票につき新しい順に最大300件
+const cleanLog = lg => (Array.isArray(lg) ? lg : []).filter(e => e && typeof e === 'object')
+  .map(e => ({ t: num(e.t), s: String(e.s == null ? '' : e.s).slice(0, 80) })).slice(-300);
 const cleanLines = ls => (Array.isArray(ls) ? ls : [])
   .filter(l => l && typeof l === 'object')
-  .map(l => ({ name: String(l.name == null ? 'その他' : l.name).slice(0, 40), price: num(l.price), qty: num(l.qty) }))
+  .map(l => ({ name: String(l.name == null ? 'その他' : l.name).slice(0, 40), price: num(l.price), qty: num(l.qty), at: num(l.at) || 0 }))
   .filter(l => l.qty > 0);
 function normalize(o) {
   if (!o || typeof o !== 'object' || !o.seats || typeof o.seats !== 'object' || !Array.isArray(o.done)) throw new Error('bad');
   for (let i = 1; i <= CFG.seats; i++) {
     const st = o.seats[i] && typeof o.seats[i] === 'object' ? o.seats[i] : {};
-    o.seats[i] = { lines: cleanLines(st.lines), name: typeof st.name === 'string' ? st.name.slice(0, 30) : '' };
+    o.seats[i] = { lines: cleanLines(st.lines), name: typeof st.name === 'string' ? st.name.slice(0, 30) : '', log: cleanLog(st.log) };
   }
   // 会計済みは1件も捨てずに形だけ整える（壊れた件でも金額は残す）
   o.done = o.done.filter(d => d && typeof d === 'object').map(d => {
@@ -346,7 +358,7 @@ function normalize(o) {
       id: String(d.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6))),
       seat: num(d.seat), name: typeof d.name === 'string' ? d.name.slice(0, 30) : '',
       lines, total: d.total != null ? num(d.total) : sumLines(lines),
-      method: d.method === 'paypay' ? 'paypay' : 'cash', at: num(d.at) || Date.now(),
+      method: d.method === 'paypay' ? 'paypay' : 'cash', at: num(d.at) || Date.now(), log: cleanLog(d.log),
     };
   });
   o.cur = num(o.cur); if (!(o.cur >= 1 && o.cur <= CFG.seats)) o.cur = 1;
@@ -445,7 +457,7 @@ function render() {
   $('#lines').innerHTML = seat.lines.length
     ? seat.lines.map((l, i) =>
         `<div class="row"><div class="nm"><div class="nn">${esc(l.name)}</div>` +
-        `<div class="nq"><span class="q">×${l.qty}</span><span class="sub">${yen(l.price * l.qty)}</span></div></div>` +
+        `<div class="nq"><span class="q">×${l.qty}</span><span class="sub">${yen(l.price * l.qty)}</span>${l.at ? `<span class="tm">${hm(l.at)}</span>` : ''}</div></div>` +
         `<button data-a="dec" data-i="${i}">−1</button>` +
         `<button class="inc" data-a="inc" data-i="${i}">＋1</button>` +
         `<button class="del" data-a="del" data-i="${i}">削除</button></div>`).join('')
@@ -466,7 +478,8 @@ function render() {
         (d.name ? `<div class="gn">${esc(san(d.name))}</div>` : '') +
         `<div class="items">${brief(d.lines)}</div>` +
         `<div class="ops"><button data-a="swap" data-id="${esc(d.id)}">支払方法を変更</button>` +
-        `<button data-a="undo" data-id="${esc(d.id)}">伝票に戻す</button></div></div>`).join('')
+        `<button data-a="undo" data-id="${esc(d.id)}">伝票に戻す</button>` +
+        `<button data-a="dhist" data-id="${esc(d.id)}">履歴</button></div></div>`).join('')
     : '<div class="empty">まだありません</div>';
 
   let cash = 0, pp = 0, cn = 0, pn = 0, open = 0;
@@ -538,23 +551,31 @@ function go(n) {
   if (n < 1 || n > CFG.seats || n === S.cur) return;
   S.cur = n; say(''); commit();
 }
+function logEv(n, txt) {
+  const st = S.seats[n]; if (!Array.isArray(st.log)) st.log = [];
+  st.log.push({ t: Date.now(), s: txt }); if (st.log.length > 300) st.log.splice(0, st.log.length - 300);
+}
+// 空の伝票に新しく付け始めるときは、前のお客さんの記録を持ち越さない
+function freshIfEmpty(n) { const st = S.seats[n]; if (!st.lines.length && !st.name) st.log = []; }
 function add(i) {
   const m = CFG.menu[i]; if (!m) return;
+  freshIfEmpty(S.cur);
   const ls = S.seats[S.cur].lines;
   let l = ls.find(x => x.name === m.name && x.price === m.price);
   if (l) l.qty++; else { l = { name: m.name, price: m.price, qty: 1 }; ls.push(l); }
+  l.at = Date.now(); logEv(S.cur, `${m.name} +1（計${l.qty}）`);
   say(`No.${S.cur}　${m.name} +1（計${l.qty}）`, true);
   buzz(); commit();
 }
 function inc(i) {
   const l = S.seats[S.cur].lines[i]; if (!l) return;
-  l.qty++;
+  l.qty++; l.at = Date.now(); logEv(S.cur, `${l.name} +1（計${l.qty}）`);
   say(`No.${S.cur}　${l.name} +1（計${l.qty}）`, true);
   buzz(); commit();
 }
 function dec(i) {
   const ls = S.seats[S.cur].lines, l = ls[i]; if (!l) return;
-  l.qty--;
+  l.qty--; logEv(S.cur, `${l.name} −1（計${l.qty}）`);
   say(`No.${S.cur}　${l.name} −1（計${l.qty}）`);
   if (l.qty <= 0) { ls.splice(i, 1); block(); }
   commit();
@@ -563,7 +584,7 @@ function del(i) {
   const n = S.cur, ls = S.seats[n].lines, l = ls[i]; if (!l) return;
   const doIt = () => {
     const k = S.seats[n].lines.indexOf(l); if (k < 0) return;
-    S.seats[n].lines.splice(k, 1); block(); say(`No.${n}　${l.name} を削除`); commit();
+    S.seats[n].lines.splice(k, 1); block(); logEv(n, `${l.name} を削除（×${l.qty}）`); say(`No.${n}　${l.name} を削除`); commit();
   };
   if (l.qty >= 2) ask(`No.${n} の「${esc(l.name)} ×${l.qty}」を削除しますか？`, '削除する', doIt, { danger: true });
   else doIt();
@@ -581,14 +602,15 @@ function pay(n, method, expected) {
   closeModal();
   const ls = S.seats[n].lines; if (!ls.length) return;
   if (sumLines(ls) !== expected) { S.cur = n; say('金額が変わっていたので会計画面を開き直しました'); render(); openPay(); return; }
-  const lines = ls.map(l => ({ name: l.name, price: l.price, qty: l.qty }));
+  const lines = ls.map(l => ({ name: l.name, price: l.price, qty: l.qty, at: l.at || 0 }));
   const total = sumLines(lines);
-  const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), seat: n, name: S.seats[n].name || '', lines, total, method, at: Date.now() };
+  logEv(n, `会計 ${yen(total)}（${mName(method)}）`);
+  const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), seat: n, name: S.seats[n].name || '', lines, total, method, at: Date.now(), log: S.seats[n].log.slice() };
   S.done.unshift(rec);
-  S.seats[n].lines = []; S.seats[n].name = '';
+  S.seats[n].lines = []; S.seats[n].name = ''; S.seats[n].log = [];
   say(`No.${n}　会計済み ${yen(total)}（${mName(method)}）`, true);
   buzz();
-  if (commit()) queueSync({ type: 'paid', rec });
+  if (commit()) queueSync({ type: 'paid', rec: Object.assign({}, rec, { log: undefined }) });
 }
 function clearSeat() {
   const n = S.cur, t = seatTotal(n);
@@ -597,7 +619,7 @@ function clearSeat() {
     say(`No.${n} はすでに空です`); render(); return;
   }
   ask(`No.${n} に <b>未会計 ${yen(t)}</b> が残っています。<br>会計せずに伝票を空にしますか？<br><small>（お会計なら「会計」ボタンを使ってください）</small>`,
-      '空にする', () => { S.seats[n].lines = []; S.seats[n].name = ''; say(`No.${n} を空にしました`); commit(); }, { danger: true });
+      '空にする', () => { S.seats[n].lines = []; S.seats[n].name = ''; S.seats[n].log = []; say(`No.${n} を空にしました`); commit(); }, { danger: true });
 }
 function findDone(id) { return S.done.findIndex(d => d.id === id); }
 function swapMethod(id) {
@@ -613,6 +635,15 @@ function firstEmpty() {
   for (let i = 1; i <= CFG.seats; i++) if (!S.seats[i].lines.length && !S.seats[i].name) return i;
   return 0;
 }
+function showLog(title, log) {
+  const rows = (log || []).slice().reverse();
+  modal(`<div class="ttl">${title}</div>` +
+    (rows.length
+      ? `<div class="loglist">${rows.map((e, k) => `<div${k === 0 ? ' class="new"' : ''}><b>${hm(e.t)}</b><span>${esc(e.s)}</span></div>`).join('')}</div>` +
+        `<div class="ferr" style="color:var(--muted)">新しい順。いちばん上が最後の操作です</div>`
+      : `<div class="msg">まだ記録がありません</div>`) +
+    `<div class="btns mt"><button class="b-x" data-m="x">閉じる</button></div>`, { x: closeModal });
+}
 function undoDone(id) {
   const d = S.done[findDone(id)]; if (!d) return;
   const to = firstEmpty();
@@ -621,8 +652,9 @@ function undoDone(id) {
     const k = findDone(id); if (k < 0) return;
     const n = firstEmpty(); if (!n) return;
     const rec = S.done.splice(k, 1)[0];
-    S.seats[n].lines = rec.lines.map(r => ({ name: r.name, price: r.price, qty: r.qty }));
+    S.seats[n].lines = rec.lines.map(r => ({ name: r.name, price: r.price, qty: r.qty, at: r.at || 0 }));
     S.seats[n].name = rec.name || '';
+    S.seats[n].log = (rec.log || []).slice(); logEv(n, `会計を取り消して No.${n} に戻した（${hm(rec.at)}の会計）`);
     S.cur = n; say(`No.${n} に未会計で戻しました`);
     if (commit()) queueSync({ type: 'undo', rec: { id: rec.id } });
     window.scrollTo(0, 0);
@@ -669,9 +701,11 @@ function rememberCustom(name, price) {
 }
 function addFree(name, price) {
   rememberCustom(name, price);
+  freshIfEmpty(S.cur);
   const ls = S.seats[S.cur].lines;
   let l = ls.find(x => x.name === name && x.price === price);
   if (l) l.qty++; else { l = { name, price, qty: 1 }; ls.push(l); }
+  l.at = Date.now(); logEv(S.cur, `${name} ${yen(price)} +1（計${l.qty}）`);
   say(`No.${S.cur}　${name} ${yen(price)} +1（計${l.qty}）`, true);
   buzz(); commit();
 }
@@ -942,6 +976,8 @@ document.addEventListener('click', e => {
     case 'free': openFree(); break;
     case 'export': openExport(); break;
     case 'addslot': addSlot(); break;
+    case 'hist': showLog(`No.${S.cur}${S.seats[S.cur].name ? '　' + esc(san(S.seats[S.cur].name)) : ''} の履歴`, S.seats[S.cur].log); break;
+    case 'dhist': { const d = S.done[findDone(id)]; if (d) showLog(`${hm(d.at)} 会計（No.${d.seat}${d.name ? '・' + esc(san(d.name)) : ''}）の履歴`, d.log); } break;
     case 'syncset': openSync(); break;
     case 'notAppOk': $('#notApp').classList.remove('show'); try { sessionStorage.setItem('notAppOk', '1'); } catch (_) {} break;
   }
